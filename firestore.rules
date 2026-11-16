@@ -1,0 +1,84 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =========================================================================
+    // FAHAD DEV — Zero-Trust Firestore Security Rules
+    // =========================================================================
+    // Helper: Verify authenticated admin role via custom claim or admins/{uid}
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.admin == true ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidNonEmptyString(val, maxLen) {
+      return val is string && val.size() > 0 && val.size() <= maxLen;
+    }
+
+    // -------------------------------------------------------------------------
+    // Public Website Configuration & Content (Read-Only for Public, Admin Write)
+    // -------------------------------------------------------------------------
+    match /settings/{settingId} {
+      allow read: if settingId in [
+        'public', 'seo', 'ads', 'community', 'maintenance', 'announcement'
+      ];
+      allow write: if isAdmin();
+    }
+
+    match /menu/{menuId} {
+      allow read: if !('enabled' in resource.data) || resource.data.enabled == true || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /social/{socialId} {
+      allow read: if !('enabled' in resource.data) || resource.data.enabled == true || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    match /categories/{categoryId} {
+      allow read: if !('published' in resource.data) || resource.data.published == true || isAdmin();
+      allow write: if isAdmin();
+
+      match /versions/{versionId} {
+        allow read: if !('published' in resource.data) || resource.data.published == true || isAdmin();
+        allow write: if isAdmin();
+
+        match /links/{linkId} {
+          allow read: if !('enabled' in resource.data) || resource.data.enabled == true || isAdmin();
+          allow write: if isAdmin();
+        }
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // Analytics: Append-only validated event creation; no public read/update/delete
+    // -------------------------------------------------------------------------
+    match /analytics/{eventId} {
+      allow read, update, delete: if isAdmin();
+      allow create: if
+        request.resource.data.keys().hasOnly([
+          'type', 'categoryId', 'versionId', 'linkId', 'platform', 'createdAt'
+        ]) &&
+        request.resource.data.type in ['download_click', 'view_category', 'view_version', 'share_click'] &&
+        isValidNonEmptyString(request.resource.data.categoryId, 80) &&
+        (!('versionId' in request.resource.data) || isValidNonEmptyString(request.resource.data.versionId, 80)) &&
+        (!('linkId' in request.resource.data) || isValidNonEmptyString(request.resource.data.linkId, 80)) &&
+        (!('platform' in request.resource.data) || isValidNonEmptyString(request.resource.data.platform, 40)) &&
+        request.resource.data.createdAt == request.time;
+    }
+
+    // -------------------------------------------------------------------------
+    // Admin Registry (Protected)
+    // -------------------------------------------------------------------------
+    match /admins/{uid} {
+      allow read: if isAuthenticated() && request.auth.uid == uid;
+      allow write: if false; // Manage admin claims/documents strictly via Firebase Admin SDK / Console
+    }
+  }
+}

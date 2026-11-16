@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FAHAD DEV — Futuristic 3D Developer Portfolio &amp; Resource Hub</title>
+  <meta name="description" content="Explore free website templates, APK builds, bots, security guides, API tools, review projects, and PC utilities by FAHAD DEV." />
+  <meta name="theme-color" content="#05070F" />
+
+  <!-- Open Graph / Social Metadata -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="FAHAD DEV — Futuristic 3D Developer Portal" />
+  <meta property="og:description" content="Creative Developer • Video Creator — 100% Free Developer Resources, Templates, APKs &amp; Tools." />
+  <meta property="og:image" content="./assets/img/og-banner.svg" />
+  <meta name="twitter:card" content="summary_large_image" />
+
+  <!-- PWA & Icons -->
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="icon" type="image/png" href="./assets/img/favicon.png" />
+  <link rel="apple-touch-icon" href="./assets/img/icon-192.png" />
+
+  <!-- Google Fonts: Orbitron, Inter, Hind Siliguri, JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Orbitron:wght@700;800&display=swap" rel="stylesheet" />
+
+  <!-- ======================================================================
+       DEDICATED GOOGLE ADSENSE HEAD INTEGRATION LOCATION
+       Uncomment and insert your verified AdSense Publisher ID when ready:
+       <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXXXXXXXXXXXXXX"
+               crossorigin="anonymous"></script>
+       ====================================================================== -->
+
+  <link rel="stylesheet" href="./assets/css/style.css" />
+</head>
+<body>
+  <!-- Intro Cyber Loader -->
+  <div id="intro-loader" class="intro-loader" role="status" aria-label="Loading FAHAD DEV">
+    <div class="loader-core">
+      <div class="loader-ring"></div>
+      <div class="loader-brand">FAHAD DEV</div>
+    </div>
+  </div>
+
+  <!-- 3D Three.js Particle Canvas & Cyber Grid -->
+  <canvas id="three-bg-canvas" aria-hidden="true"></canvas>
+  <div class="cyber-grid-overlay" aria-hidden="true"></div>
+  <div class="ambient-orb orb-1" aria-hidden="true"></div>
+  <div class="ambient-orb orb-2" aria-hidden="true"></div>
+
+  <!-- No Internet Connection Banner -->
+  <div id="offline-banner" class="offline-banner" role="alert" hidden>
+    <span data-i18n="offlineBanner">No internet connection — viewing cached shell. Live Firestore sync paused.</span>
+  </div>
+
+  <!-- Announcement Bar (Controlled by Firestore settings/announcement) -->
+  <div id="announcement-bar" class="announcement-bar" hidden>
+    <span class="announcement-pill">LIVE</span>
+    <span id="announcement-text"></span>
+    <button id="announcement-close" class="bar-close-btn" type="button" aria-label="Dismiss announcement">✕</button>
+  </div>
+
+  <!-- Sticky Glassmorphism Header -->
+  <header class="site-header">
+    <div class="container header-inner">
+      <a href="#hero" class="brand-link" aria-label="FAHAD DEV Home">
+        <img src="./assets/img/logo.svg" alt="FAHAD DEV Logo" class="brand-logo-img" width="38" height="38" />
+        <span class="brand-wordmark">
+          <span class="brand-name-text">FAHAD DEV</span>
+          <svg class="verified-badge" viewBox="0 0 24 24" fill="currentColor" aria-label="Verified Developer" role="img">
+            <path d="M22.5 12.5c0-1.58-.88-2.95-2.18-3.66.15-.44.24-.91.24-1.4 0-2.46-1.99-4.44-4.44-4.44-.49 0-.96.08-1.4.24A4.19 4.19 0 0 0 11.06 1c-1.58 0-2.95.88-3.66 2.18-.44-.15-.91-.24-1.4-.24-2.46 0-4.44 1.99-4.44 4.44 0 .49.08.96.24 1.4A4.19 4.19 0 0 0 0 12.5c0 1.58.88 2.95 2.18 3.66-.15.44-.24.91-.24 1.4 0 2.46 1.99 4.44 4.44 4.44.49 0 .96-.08 1.4-.24A4.19 4.19 0 0 0 11.06 24c1.58 0 2.95-.88 3.66-2.18.44.15.91.24 1.4.24 2.46 0 4.44-1.99 4.44-4.44 0-.49-.08-.96-.24-1.4A4.19 4.19 0 0 0 22.5 12.5zm-12.1 4.25-3.65-3.65 1.41-1.41 2.24 2.24 5.24-5.24 1.41 1.41-6.65 6.65z"/>
+          </svg>
+        </span>
+      </a>
+
+      <div class="header-actions">
+        <button id="pwa-install-btn" class="icon-btn" type="button" hidden aria-label="Install PWA App">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span data-i18n="installApp">Install App</span>
+        </button>
+
+        <button id="search-toggle-btn" class="icon-btn" type="button" aria-label="Search resources">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </button>
+
+        <button id="theme-toggle-btn" class="icon-btn" type="button" aria-label="Toggle dark or light theme" aria-pressed="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        </button>
+
+        <button id="lang-toggle-btn" class="icon-btn" type="button" aria-label="Switch language">
+          <span id="lang-toggle-label">বাং</span>
+        </button>
+
+        <button id="menu-toggle-btn" class="icon-btn" type="button" aria-label="Open navigation menu">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Live Search Bar -->
+  <div id="search-bar-panel" class="search-bar-panel" hidden>
+    <div class="container">
+      <div class="search-input-wrap">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input id="search-input" type="search" placeholder="Search categories, versions (e.g. V16.0, APK, Bot)..." aria-label="Search categories and versions" />
+        <button id="search-clear-btn" class="bar-close-btn" type="button" aria-label="Clear search">✕</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ad Slot 1: Header Banner -->
+  <div id="ad-header-banner" class="container ad-slot" hidden></div>
+
+  <!-- Glass Sidebar Drawer -->
+  <div id="drawer-backdrop" class="drawer-backdrop" hidden></div>
+  <aside id="nav-drawer" class="nav-drawer" aria-label="Primary Navigation Drawer" hidden>
+    <div class="drawer-head">
+      <span class="drawer-title" data-i18n="menuTitle">Navigation Menu</span>
+      <button id="drawer-close-btn" class="icon-btn" type="button" aria-label="Close navigation drawer">✕</button>
+    </div>
+    <ul id="drawer-menu-list" class="drawer-nav-list"></ul>
+  </aside>
+
+  <main>
+    <!-- Hero Section -->
+    <section id="hero" class="hero-section">
+      <div class="container hero-grid">
+        <div class="hero-left">
+          <div class="hero-eyebrow">
+            <span class="pulse-dot" aria-hidden="true"></span>
+            <span id="hero-badge-text">WELCOME TO DEVELOPER WEBSITE</span>
+          </div>
+
+          <div class="hero-title-row">
+            <h1 id="hero-title-text" class="hero-title">FAHAD DEV</h1>
+            <svg class="verified-badge hero-verified" viewBox="0 0 24 24" fill="currentColor" aria-label="Verified Developer" role="img">
+              <path d="M22.5 12.5c0-1.58-.88-2.95-2.18-3.66.15-.44.24-.91.24-1.4 0-2.46-1.99-4.44-4.44-4.44-.49 0-.96.08-1.4.24A4.19 4.19 0 0 0 11.06 1c-1.58 0-2.95.88-3.66 2.18-.44-.15-.91-.24-1.4-.24-2.46 0-4.44 1.99-4.44 4.44 0 .49.08.96.24 1.4A4.19 4.19 0 0 0 0 12.5c0 1.58.88 2.95 2.18 3.66-.15.44-.24.91-.24 1.4 0 2.46 1.99 4.44 4.44 4.44.49 0 .96-.08 1.4-.24A4.19 4.19 0 0 0 11.06 24c1.58 0 2.95-.88 3.66-2.18.44.15.91.24 1.4.24 2.46 0 4.44-1.99 4.44-4.44 0-.49-.08-.96-.24-1.4A4.19 4.19 0 0 0 22.5 12.5zm-12.1 4.25-3.65-3.65 1.41-1.41 2.24 2.24 5.24-5.24 1.41 1.41-6.65 6.65z"/>
+            </svg>
+          </div>
+
+          <p class="hero-subtitle">
+            <span id="hero-typing-text">Creative Developer • Video Creator</span><span class="typing-cursor" aria-hidden="true"></span>
+          </p>
+
+          <div id="hero-social-buttons" class="social-row"></div>
+
+          <!-- Developer Code Card -->
+          <div class="code-card tilt-card">
+            <div class="code-card-bar">
+              <div class="window-dots" aria-hidden="true">
+                <span class="dot-r"></span><span class="dot-y"></span><span class="dot-g"></span>
+              </div>
+              <span class="code-filename">developer.profile.js</span>
+            </div>
+            <pre><code id="hero-code-block"></code></pre>
+          </div>
+        </div>
+
+        <div class="hero-right">
+          <div class="glass-panel video-preview-card tilt-card">
+            <div class="video-header-row">
+              <span id="video-card-title" class="video-badge-title">WATCH THIS VIDEO</span>
+              <span class="badge badge-free">HD</span>
+            </div>
+            <div class="video-stage">
+              <img src="./assets/img/video-thumb.svg" alt="FAHAD DEV Featured Video Preview" loading="lazy" />
+              <div class="video-play-overlay">
+                <button id="watch-video-btn" class="play-circle-btn" type="button" aria-label="Watch featured video">
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3"/></svg>
+                </button>
+              </div>
+            </div>
+            <div id="hero-video-embed-slot" class="video-embed-slot" hidden></div>
+            <p class="section-desc" data-i18n="watchVideoDesc">Featured developer showcase &amp; step-by-step build walkthrough.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Ad Slot 2: Hero Bottom Ad -->
+    <div id="ad-hero-bottom" class="container ad-slot" hidden></div>
+
+    <!-- Explore Section (01 - 07) -->
+    <section id="explore" class="section-block">
+      <div class="container">
+        <div class="section-head">
+          <div class="section-eyebrow" data-i18n="exploreEyebrow">QUICK NAVIGATION</div>
+          <h2 class="section-title" data-i18n="exploreTitle">Explore Resources</h2>
+          <p class="section-desc" data-i18n="exploreDesc">Jump directly into curated developer tools, source templates, and builds.</p>
+        </div>
+        <div id="explore-grid" class="explore-grid"></div>
+      </div>
+    </section>
+
+    <!-- Categories Section -->
+    <section id="categories" class="section-block">
+      <div class="container">
+        <div class="section-head">
+          <div class="section-eyebrow" data-i18n="categoriesEyebrow">RESOURCE LIBRARY</div>
+          <h2 class="section-title" data-i18n="categoriesTitle">Developer Categories</h2>
+          <p class="section-desc" data-i18n="categoriesDesc">100% free, verified builds and developer resources updated in real time.</p>
+        </div>
+        <div id="categories-grid" class="categories-grid"></div>
+      </div>
+    </section>
+
+    <!-- Ad Slot 5: Footer Banner -->
+    <div id="ad-footer-banner" class="container ad-slot" hidden></div>
+  </main>
+
+  <!-- Version & Resource Links Modal -->
+  <div id="version-modal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="modal-title" hidden>
+    <div class="glass-panel modal-dialog">
+      <div class="modal-header">
+        <div>
+          <h2 id="modal-title">Available Versions</h2>
+          <p id="modal-subtitle"></p>
+        </div>
+        <button id="modal-close-btn" class="icon-btn" type="button" aria-label="Close modal">✕</button>
+      </div>
+      <!-- Ad Slot 4: Version Modal Ad -->
+      <div id="ad-version-modal" class="ad-slot" style="margin: 12px 24px 0;" hidden></div>
+      <div id="modal-body" class="modal-body"></div>
+    </div>
+  </div>
+
+  <!-- Community Popup -->
+  <div id="community-popup" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="community-title" hidden>
+    <div class="glass-panel community-dialog">
+      <img src="./assets/img/logo.svg" alt="FAHAD DEV" width="52" height="52" />
+      <h2 id="community-title">Join Our Developer Community!</h2>
+      <p id="community-subtitle">Get instant updates on free websites, APK builds, bots, APIs &amp; tutorials.</p>
+      <div class="community-actions">
+        <a id="community-tg-btn" class="btn-primary" href="https://t.me/" target="_blank" rel="noopener noreferrer" data-i18n="joinTelegram">Join Telegram</a>
+        <a id="community-yt-btn" class="btn-glass" href="https://www.youtube.com/" target="_blank" rel="noopener noreferrer" data-i18n="subscribeYoutube">Subscribe YouTube</a>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+        <label class="dont-show-row">
+          <input id="community-dont-show" type="checkbox" />
+          <span data-i18n="dontShowAgain">Don't show this again</span>
+        </label>
+        <button id="community-close-btn" class="btn-glass btn-sm" type="button" data-i18n="close">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Maintenance Mode Overlay -->
+  <div id="maintenance-overlay" class="maintenance-overlay" role="alertdialog" aria-modal="true" hidden>
+    <div class="glass-panel maintenance-card">
+      <img src="./assets/img/logo.svg" alt="FAHAD DEV" width="56" height="56" />
+      <h2 data-i18n="maintenanceTitle">Scheduled Maintenance</h2>
+      <p id="maintenance-message"></p>
+    </div>
+  </div>
+
+  <!-- Ad Slot 6: Sticky Bottom Advertisement with Close Button -->
+  <div id="sticky-ad-bar" class="sticky-ad-bar" hidden>
+    <button id="sticky-ad-close" class="sticky-ad-close" type="button" aria-label="Close advertisement">✕</button>
+    <div id="ad-sticky-bottom" class="container"></div>
+  </div>
+
+  <!-- Back to Top Button -->
+  <button id="back-to-top-btn" class="back-to-top-btn" type="button" aria-label="Back to top">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="18 15 12 9 6 15"/></svg>
+  </button>
+
+  <!-- Toast Notifications -->
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+  <!-- Footer -->
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <div>
+        <div class="brand-wordmark">
+          <span class="brand-name-text">FAHAD DEV</span>
+        </div>
+        <p class="section-desc" data-i18n="footerTagline">Futuristic 3D Developer Portfolio &amp; Resource Ecosystem.</p>
+        <span id="sync-status-pill" class="sync-pill"></span>
+      </div>
+      <div id="footer-social-links" class="social-row" style="margin-bottom:0;"></div>
+      <div class="footer-meta-links">
+        <span>© 2026 FAHAD DEV</span>
+        <a href="./admin/index.html" data-i18n="footerAdminLink">Admin Route (Reserved)</a>
+      </div>
+    </div>
+  </footer>
+
+  <script type="module" src="./assets/js/app.js"></script>
+</body>
+</html>

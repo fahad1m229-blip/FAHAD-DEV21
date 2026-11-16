@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450" fill="none">
+  <defs>
+    <linearGradient id="vbg" x1="0" y1="0" x2="800" y2="450" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#05070F"/>
+      <stop offset="55%" stop-color="#0D1736"/>
+      <stop offset="100%" stop-color="#19133B"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="800" y2="450" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#22D3EE"/>
+      <stop offset="50%" stop-color="#3B6CFF"/>
+      <stop offset="100%" stop-color="#8B5CF6"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="450" rx="20" fill="url(#vbg)"/>
+  <g opacity="0.2" stroke="#6C8CFF" stroke-width="1">
+    <path d="M0 75H800M0 150H800M0 225H800M0 300H800M0 375H800"/>
+    <path d="M100 0V450M200 0V450M300 0V450M400 0V450M500 0V450M600 0V450M700 0V450"/>
+  </g>
+  <circle cx="400" cy="225" r="140" stroke="url(#accent)" stroke-width="2" stroke-dasharray="10 8" opacity="0.6"/>
+  <circle cx="400" cy="225" r="95" fill="#3B6CFF" fill-opacity="0.18" stroke="#22D3EE" stroke-width="1.5"/>
+  <text x="400" y="92" text-anchor="middle" fill="#22D3EE" font-family="monospace" font-size="16" letter-spacing="4">FAHAD DEV • FEATURED VIDEO</text>
+  <text x="400" y="390" text-anchor="middle" fill="#EAF0FF" font-family="sans-serif" font-weight="700" font-size="22" letter-spacing="2">DEVELOPER SHOWCASE &amp; TUTORIALS</text>
+</svg>

@@ -1,0 +1,122 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =========================================================================
+    // FAHAD DEV — Hardened Firestore Security Rules (Phase 1 Foundation)
+    // =========================================================================
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function adminDoc() {
+      return get(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+        adminDoc().data.role in ['owner', 'editor', 'viewer'];
+    }
+
+    function isOwner() {
+      return isAdmin() && adminDoc().data.role == 'owner';
+    }
+
+    function isEditorOrOwner() {
+      return isAdmin() && adminDoc().data.role in ['owner', 'editor'];
+    }
+
+    function isValidString(val, maxLen) {
+      return val is string && val.size() <= maxLen;
+    }
+
+    // -------------------------------------------------------------------------
+    // Settings Collection
+    // -------------------------------------------------------------------------
+    match /settings/{docId} {
+      // Public can read public website settings
+      allow read: if docId in [
+        'site', 'public', 'hero', 'social', 'announcement',
+        'community', 'ads', 'seo', 'maintenance'
+      ] || isAdmin();
+
+      // Sensitive docs (ads scripts, site customCss/customJs) restricted to Owner
+      allow write: if isOwner() && docId in [
+        'site', 'public', 'hero', 'social', 'announcement',
+        'community', 'ads', 'seo', 'maintenance'
+      ];
+
+      // Editors may update non-script content settings (hero, social, announcement, community, seo)
+      allow write: if isEditorOrOwner() && docId in [
+        'hero', 'social', 'announcement', 'community', 'seo', 'maintenance'
+      ];
+    }
+
+    // -------------------------------------------------------------------------
+    // Navigation Menu
+    // -------------------------------------------------------------------------
+    match /menu/{menuId} {
+      allow read: if (!('visible' in resource.data) || resource.data.visible == true) || isAdmin();
+      allow write: if isEditorOrOwner();
+    }
+
+    // -------------------------------------------------------------------------
+    // Categories & Nested Versions Subcollection
+    // -------------------------------------------------------------------------
+    match /categories/{categoryId} {
+      allow read: if (!('visible' in resource.data) || resource.data.visible == true) || isAdmin();
+      allow write: if isEditorOrOwner();
+
+      match /versions/{versionId} {
+        allow read: if (!('visible' in resource.data) || resource.data.visible == true) || isAdmin();
+        allow write: if isEditorOrOwner();
+
+        match /links/{linkId} {
+          allow read: if (!('active' in resource.data) || resource.data.active == true) || isAdmin();
+          allow write: if isEditorOrOwner();
+        }
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // Admins Registry (Owner-managed, self-readable)
+    // -------------------------------------------------------------------------
+    match /admins/{uid} {
+      allow read: if (isSignedIn() && request.auth.uid == uid) || isAdmin();
+      allow create, update: if isOwner() &&
+        request.resource.data.keys().hasOnly(['role', 'name', 'email', 'avatar', 'updatedAt']) &&
+        request.resource.data.role in ['owner', 'editor', 'viewer'] &&
+        isValidString(request.resource.data.name, 80) &&
+        isValidString(request.resource.data.email, 160);
+      // Prevent owner from accidentally deleting their own record
+      allow delete: if isOwner() && request.auth.uid != uid;
+    }
+
+    // -------------------------------------------------------------------------
+    // Activity Logs (Admins read; Editors/Owners append-only)
+    // -------------------------------------------------------------------------
+    match /logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isEditorOrOwner() &&
+        request.resource.data.keys().hasOnly(['admin', 'adminUid', 'action', 'before', 'after', 'time']) &&
+        request.resource.data.adminUid == request.auth.uid &&
+        request.resource.data.time == request.time;
+      allow update, delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // Stats Collection (Admin read; restricted updates; public cannot tamper)
+    // -------------------------------------------------------------------------
+    match /stats/{day} {
+      allow read: if isAdmin();
+      allow write: if isOwner();
+    }
+
+    // Deny everything else by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

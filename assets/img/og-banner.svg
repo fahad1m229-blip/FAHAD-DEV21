@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="630" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#05070F"/>
+      <stop offset="50%" stop-color="#0A1020"/>
+      <stop offset="100%" stop-color="#0F1834"/>
+    </linearGradient>
+    <linearGradient id="neon" x1="200" y1="150" x2="1000" y2="480" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#22D3EE"/>
+      <stop offset="50%" stop-color="#3B6CFF"/>
+      <stop offset="100%" stop-color="#8B5CF6"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <g opacity="0.16" stroke="#3B6CFF" stroke-width="1">
+    <path d="M0 90H1200M0 180H1200M0 270H1200M0 360H1200M0 450H1200M0 540H1200"/>
+    <path d="M120 0V630M240 0V630M360 0V630M480 0V630M600 0V630M720 0V630M840 0V630M960 0V630M1080 0V630"/>
+  </g>
+  <circle cx="260" cy="180" r="220" fill="#3B6CFF" fill-opacity="0.15"/>
+  <circle cx="940" cy="440" r="240" fill="#8B5CF6" fill-opacity="0.15"/>
+  <rect x="80" y="90" width="1040" height="450" rx="28" fill="#0F1834" fill-opacity="0.65" stroke="url(#neon)" stroke-width="2"/>
+  <text x="600" y="255" text-anchor="middle" fill="#22D3EE" font-family="monospace" font-size="22" letter-spacing="6">WELCOME TO DEVELOPER WEBSITE</text>
+  <text x="600" y="345" text-anchor="middle" fill="#EAF0FF" font-family="sans-serif" font-weight="800" font-size="84" letter-spacing="8">FAHAD DEV</text>
+  <text x="600" y="410" text-anchor="middle" fill="#8A97B8" font-family="sans-serif" font-size="30">Creative Developer • Video Creator • 3D Cyber Resources</text>
+</svg>
