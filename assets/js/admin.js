@@ -289,7 +289,9 @@ function setupLoginForm() {
   const passIn = document.getElementById("login-password");
   const rememberChk = document.getElementById("login-remember");
   const submitBtn = document.getElementById("login-submit-btn");
+  const forgotBtn = document.getElementById("forgot-password-btn");
   const alertBox = document.getElementById("login-alert");
+  let isSubmitting = false;
 
   const showAlert = (msg, isInfo = false) => {
     if (!alertBox) return;
@@ -303,22 +305,34 @@ function setupLoginForm() {
     passIn.type = passIn.type === "password" ? "text" : "password";
   });
 
-  document.getElementById("forgot-password-btn")?.addEventListener("click", async () => {
+  forgotBtn?.addEventListener("click", async () => {
     const email = emailIn?.value?.trim();
     if (!email) {
       showAlert(t("enterEmailFirst"));
       return;
     }
-    const res = await authService.resetPassword(email, state.lang);
-    if (res.ok) {
-      showAlert(t("resetSent"), true);
-    } else {
-      showAlert(res.message);
+    forgotBtn.disabled = true;
+    try {
+      const res = await authService.resetPassword(email, state.lang);
+      if (res.ok) {
+        showAlert(t("resetSent"), true);
+      } else {
+        showAlert(res.message);
+      }
+    } catch (err) {
+      console.error("[AdminLogin] Forgot password error:", {
+        code: err?.code || "RESET_ERROR",
+        message: err?.message || String(err)
+      });
+      showAlert(err?.message || "Password reset failed.");
+    } finally {
+      forgotBtn.disabled = false;
     }
   });
 
   form?.addEventListener("submit", async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
     if (alertBox) alertBox.hidden = true;
 
     const remaining = authService.getLockoutRemainingMs();
@@ -327,23 +341,36 @@ function setupLoginForm() {
       return;
     }
 
+    isSubmitting = true;
     submitBtn.disabled = true;
     submitBtn.textContent = t("signingIn");
+    console.info("[AdminLogin] Form submitted; awaiting authentication.");
 
-    const res = await authService.signIn(
-      emailIn.value,
-      passIn.value,
-      Boolean(rememberChk?.checked),
-      state.lang
-    );
+    try {
+      const res = await authService.signIn(
+        emailIn.value,
+        passIn.value,
+        Boolean(rememberChk?.checked),
+        state.lang
+      );
 
-    submitBtn.disabled = false;
-    submitBtn.textContent = t("signInBtn");
-
-    if (!res.ok) {
-      const triesLeft = authService.getRemainingAttempts();
-      const baseMsg = res.reason === "not_admin" ? t("notAdminError") : res.message;
-      showAlert(`${baseMsg}${triesLeft > 0 ? ` (${triesLeft} left)` : ""}`);
+      if (!res.ok) {
+        const triesLeft = authService.getRemainingAttempts();
+        const baseMsg = res.message || (res.reason === "not_admin" ? t("notAdminError") : t("firebaseNotConfigured"));
+        const suffix = res.showAttemptsLeft && triesLeft > 0 ? ` (${triesLeft} left)` : "";
+        showAlert(`${baseMsg}${suffix}`);
+      }
+    } catch (err) {
+      console.error("[AdminLogin] Unhandled error during sign-in:", {
+        code: err?.code || "LOGIN_SUBMIT_ERROR",
+        message: err?.message || String(err)
+      });
+      showAlert(err?.message || "Login request failed. Please try again.");
+    } finally {
+      isSubmitting = false;
+      submitBtn.disabled = false;
+      submitBtn.textContent = t("signInBtn");
+      console.info("[AdminLogin] Submit handler completed; button restored.");
     }
   });
 }
@@ -466,9 +493,18 @@ async function bootstrap() {
   initThreeBackground(document.getElementById("admin-three-canvas"));
 
   let requestedSubRoute = getRequestedSubRoute();
-  const { configured } = await authService.init();
+  let initRes;
+  try {
+    initRes = await authService.init();
+  } catch (err) {
+    console.error("[AdminLogin] Bootstrap auth initialization threw error:", {
+      code: err?.code || "BOOTSTRAP_INIT_ERROR",
+      message: err?.message || String(err)
+    });
+    initRes = { configured: true, sdkError: err };
+  }
 
-  if (!configured) {
+  if (!initRes.configured) {
     enforceLoggedOutState();
     const alertBox = document.getElementById("login-alert");
     if (alertBox) {
@@ -479,6 +515,11 @@ async function bootstrap() {
     return;
   }
 
+  if (initRes.sdkError) {
+    enforceLoggedOutState(t("sdkLoadError"));
+    return;
+  }
+
   authService.onAuthChange((session) => {
     if (!session) {
       enforceLoggedOutState();
@@ -486,7 +527,15 @@ async function bootstrap() {
     }
 
     if (session.unauthorized) {
-      enforceLoggedOutState(t("notAdminError"));
+      const msgKey =
+        session.reason === "inactive"
+          ? "adminInactiveError"
+          : session.reason === "permission_denied"
+          ? "dbPermissionError"
+          : session.reason === "db_timeout" || session.reason === "db_error"
+          ? "dbTimeoutError"
+          : "notAdminError";
+      enforceLoggedOutState(t(msgKey));
       return;
     }
 

@@ -41,6 +41,11 @@ export const ADMIN_I18N = {
     usernameNeedsDomain: "Enter your Firebase Admin email address (or configure ADMIN_USERNAME_DOMAIN in firebase-config.js).",
     lockoutWait: "Too many failed login attempts. Temporarily locked for security.",
     notAdminError: "Unauthorized Access: Your account is not registered in the Firestore admins collection.",
+    adminInactiveError: "Access Denied: Your admin account is marked inactive in Firestore.",
+    dbPermissionError: "Firestore blocked reading admins/{uid}. Verify Firestore Security Rules.",
+    dbTimeoutError: "Database verification timed out while contacting Firestore. Please retry.",
+    authTimeoutError: "Authentication request timed out. Check network connectivity and try again.",
+    sdkLoadError: "Unable to load Firebase SDK modules. Check your network or firewall.",
     firebaseNotConfigured: "Configure /assets/js/firebase-config.js with your Firebase Web App credentials before signing in.",
     overview: "Overview",
     dashboard: "Overview",
@@ -88,6 +93,11 @@ export const ADMIN_I18N = {
     usernameNeedsDomain: "Firebase Admin ইমেইল লিখুন (অথবা firebase-config.js-এ ADMIN_USERNAME_DOMAIN সেট করুন)।",
     lockoutWait: "অতিরিক্ত ভুল লগইন চেষ্টার কারণে সাময়িকভাবে লক করা হয়েছে।",
     notAdminError: "অননুমোদিত অ্যাক্সেস: আপনার অ্যাকাউন্ট Firestore admins কালেকশনে অনুমোদিত নয়।",
+    adminInactiveError: "অ্যাক্সেস বাতিল: আপনার অ্যাডমিন অ্যাকাউন্টটি Firestore-এ নিষ্ক্রিয় করা আছে।",
+    dbPermissionError: "Firestore থেকে admins/{uid} পড়ার অনুমতি পাওয়া যায়নি। Security Rules যাচাই করুন।",
+    dbTimeoutError: "Firestore ডাটাবেস যাচাই করতে সময় শেষ (Timeout) হয়েছে। আবার চেষ্টা করুন।",
+    authTimeoutError: "লগইন রিকোয়েস্টের সময় শেষ (Timeout) হয়েছে। ইন্টারনেট সংযোগ যাচাই করে আবার চেষ্টা করুন।",
+    sdkLoadError: "Firebase SDK লোড করা যায়নি। নেটওয়ার্ক বা ফায়ারওয়াল যাচাই করুন।",
     firebaseNotConfigured: "সাইন ইন করার আগে /assets/js/firebase-config.js ফাইলে আপনার Firebase Web কনফিগ যোগ করুন।",
     overview: "ওভারভিউ",
     dashboard: "ওভারভিউ",
@@ -152,6 +162,15 @@ export function mapAuthErrorToMessage(err, lang = "en") {
       return isBn ? "অতিরিক্ত চেষ্টার কারণে সার্ভার থেকে সাময়িকভাবে ব্লক করা হয়েছে।" : "Too many failed attempts. Temporarily rate-limited by Firebase Auth.";
     case "auth/network-request-failed":
       return isBn ? "নেটওয়ার্ক সংযোগে সমস্যা হয়েছে। ইন্টারনেট যাচাই করুন।" : "Network error. Please check your internet connection.";
+    case "auth/invalid-api-key":
+    case "auth/configuration-not-found":
+      return isBn ? "Firebase Auth কনফিগারেশন সঠিক নয়।" : "Firebase Auth configuration is invalid or not enabled.";
+    case "auth/operation-not-allowed":
+      return isBn ? "Firebase Console-এ Email/Password লগইন চালু নেই।" : "Email/Password sign-in is disabled in Firebase Console.";
+    case "auth/unauthorized-domain":
+      return isBn ? "এই ডোমেইনটি Firebase Authorized Domains-এ যুক্ত নেই।" : "This domain is not authorized in Firebase Authentication settings.";
+    case "AUTH_TIMEOUT":
+      return ADMIN_I18N[lang]?.authTimeoutError || ADMIN_I18N.en.authTimeoutError;
     default:
       return isBn
         ? `সাইন ইন ব্যর্থ হয়েছে: ${err?.message || "অজানা ত্রুটি"}`
