@@ -5,8 +5,9 @@
 
 import {
   ADMIN_USERNAME_DOMAIN,
-  FIREBASE_CONFIG,
   FIRESTORE_DATABASE_ID,
+  getFirebaseConfig,
+  getMissingFirebaseFields,
   isFirebaseConfigured
 } from "./firebase-config.js";
 import { ADMIN_I18N, mapAuthErrorToMessage } from "./admin-ui.js";
@@ -66,16 +67,19 @@ export class AdminAuthService {
     }
 
     this._initPromise = (async () => {
-      const configured = isFirebaseConfigured();
+      const cfg = getFirebaseConfig();
+      const missingFields = getMissingFirebaseFields();
+      const configured = missingFields.length === 0;
       console.info("[AdminAuth] Diagnostic init check:", {
         configured,
-        hasProjectId: Boolean(FIREBASE_CONFIG?.projectId && !FIREBASE_CONFIG.projectId.startsWith("YOUR_")),
+        missingFields,
+        hasProjectId: Boolean(cfg?.projectId && !String(cfg.projectId).startsWith("YOUR_")),
         databaseId: FIRESTORE_DATABASE_ID || "(default)"
       });
 
       if (!configured) {
-        console.warn("[AdminAuth] Firebase Web configuration still contains placeholder values.");
-        return { configured: false };
+        console.warn("[AdminAuth] Firebase Web configuration is incomplete or placeholder:", missingFields);
+        return { configured: false, missingFields };
       }
 
       try {
@@ -92,7 +96,7 @@ export class AdminAuthService {
 
         this.authMod = authMod;
         this.fsMod = fsMod;
-        this.app = appMod.getApps().length ? appMod.getApp() : appMod.initializeApp(FIREBASE_CONFIG);
+        this.app = appMod.getApps().length ? appMod.getApp() : appMod.initializeApp(cfg);
         this.auth = authMod.getAuth(this.app);
         this.db = FIRESTORE_DATABASE_ID && FIRESTORE_DATABASE_ID !== "(default)"
           ? fsMod.getFirestore(this.app, FIRESTORE_DATABASE_ID)
@@ -101,7 +105,7 @@ export class AdminAuthService {
         console.info("[AdminAuth] Firebase Auth & Firestore SDK ready.", {
           elapsedMs: Math.round(performance.now() - start)
         });
-        return { configured: true };
+        return { configured: true, missingFields: [] };
       } catch (err) {
         console.error("[AdminAuth] Failed to initialize Firebase SDK:", {
           code: err?.code || "INIT_ERROR",
@@ -304,11 +308,15 @@ export class AdminAuthService {
     if (!this.auth || !this.authMod) {
       const initResult = await this.init();
       if (!initResult.configured) {
-        console.error("[AdminAuth] Aborted: Firebase Web credentials are not configured.");
+        console.error("[AdminAuth] Aborted: Firebase Web credentials are not configured.", initResult.missingFields);
+        const baseMsg = ADMIN_I18N[lang]?.firebaseNotConfigured || ADMIN_I18N.en.firebaseNotConfigured;
+        const fieldsNote = initResult.missingFields?.length
+          ? ` (${initResult.missingFields.join(", ")})`
+          : "";
         return {
           ok: false,
           showAttemptsLeft: false,
-          message: ADMIN_I18N[lang]?.firebaseNotConfigured || ADMIN_I18N.en.firebaseNotConfigured
+          message: `${baseMsg}${fieldsNote}`
         };
       }
       if (initResult.sdkError || !this.auth || !this.authMod) {

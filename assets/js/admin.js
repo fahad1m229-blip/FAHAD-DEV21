@@ -508,7 +508,10 @@ async function bootstrap() {
     enforceLoggedOutState();
     const alertBox = document.getElementById("login-alert");
     if (alertBox) {
-      alertBox.textContent = t("firebaseNotConfigured");
+      const fieldsNote = initRes.missingFields?.length
+        ? ` (${initRes.missingFields.join(", ")})`
+        : "";
+      alertBox.textContent = `${t("firebaseNotConfigured")}${fieldsNote}`;
       alertBox.className = "auth-alert info";
       alertBox.hidden = false;
     }

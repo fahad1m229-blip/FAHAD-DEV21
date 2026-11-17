@@ -2,7 +2,7 @@
  * Caches static shell assets for instant loading and provides offline.html fallback.
  * Skips Firestore/Google APIs so real-time listeners never serve stale auth/API responses.
  */
-const CACHE_VERSION = 'fahad-dev-v1.0.0';
+const CACHE_VERSION = 'fahad-dev-v1.0.1';
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -49,11 +49,12 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url);
 
-  // Never intercept Firebase, Google APIs, or hidden/admin routes
+  // Never intercept Firebase, Google APIs, live firebase-config.js, or hidden/admin routes
   if (
     url.origin !== self.location.origin ||
     url.pathname.includes('/FAHAD/admin') ||
-    url.pathname.startsWith('/admin')
+    url.pathname.startsWith('/admin') ||
+    url.pathname.endsWith('/firebase-config.js')
   ) {
     return;
   }

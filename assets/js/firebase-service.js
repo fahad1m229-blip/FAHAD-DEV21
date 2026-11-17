@@ -13,7 +13,7 @@
  * the service gracefully exposes the seed schema without inventing fake URLs.
  */
 
-import { FIREBASE_CONFIG, FIRESTORE_DATABASE_ID, isFirebaseConfigured } from "./firebase-config.js";
+import { FIRESTORE_DATABASE_ID, getFirebaseConfig, isFirebaseConfigured } from "./firebase-config.js";
 
 // Sample Seed Data (used only before Firestore is populated/configured)
 export const SEED_DATA = {
@@ -247,7 +247,8 @@ export class FirebaseService {
       ]);
 
       this.firestoreMod = fsMod;
-      this.app = appMod.initializeApp(FIREBASE_CONFIG);
+      const cfg = getFirebaseConfig();
+      this.app = appMod.getApps().length ? appMod.getApp() : appMod.initializeApp(cfg);
       this.db = FIRESTORE_DATABASE_ID && FIRESTORE_DATABASE_ID !== "(default)"
         ? fsMod.getFirestore(this.app, FIRESTORE_DATABASE_ID)
         : fsMod.getFirestore(this.app);

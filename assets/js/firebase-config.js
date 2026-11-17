@@ -1,13 +1,17 @@
 /**
  * FAHAD DEV — Firebase Web Configuration
  * ---------------------------------------------------------------------------
- * Replace the placeholder strings below with your Firebase Web App config
- * from Firebase Console -> Project Settings -> Your Apps -> Web App.
+ * Paste your real Firebase Web App config from:
+ *   Firebase Console -> Project Settings -> Your Apps -> Web App (</>)
  *
- * SECURITY NOTE:
- * Never place Firebase Admin SDK credentials, serviceAccountKey.json, or
- * private server secrets in frontend files. Firebase Web config values are
- * public identifiers secured by Firebase Security Rules.
+ * NOTE ON STATIC HOSTING & ENVIRONMENT VARIABLES:
+ * Because FAHAD DEV runs as a pure static ES-Module site (GitHub Pages / Render
+ * Static Site compatible with no build bundler), browser JS cannot read server
+ * .env / process.env variables directly. Place your Firebase Web App values
+ * below (or inject window.__FIREBASE_CONFIG__ before loading modules).
+ *
+ * Firebase Web App config keys are public client identifiers protected by
+ * Firebase Authentication Authorized Domains and Firestore Security Rules.
  */
 
 export const FIREBASE_CONFIG = {
@@ -32,16 +36,45 @@ export const FIRESTORE_DATABASE_ID = "(default)";
  */
 export const ADMIN_USERNAME_DOMAIN = "";
 
+const REQUIRED_KEYS = ["apiKey", "authDomain", "projectId", "appId"];
+
+function isPlaceholderValue(val) {
+  const s = String(val ?? "").trim();
+  return (
+    !s ||
+    s.startsWith("YOUR_") ||
+    s.includes("YOUR_PROJECT_ID") ||
+    s.startsWith("<") ||
+    s.startsWith("REPLACE_")
+  );
+}
+
+/**
+ * Returns the active Firebase Web App configuration, allowing an optional
+ * runtime window.__FIREBASE_CONFIG__ override without conflicting with defaults.
+ */
+export function getFirebaseConfig() {
+  const injected =
+    typeof globalThis !== "undefined" &&
+    globalThis.__FIREBASE_CONFIG__ &&
+    typeof globalThis.__FIREBASE_CONFIG__ === "object"
+      ? globalThis.__FIREBASE_CONFIG__
+      : null;
+
+  return injected ? { ...FIREBASE_CONFIG, ...injected } : FIREBASE_CONFIG;
+}
+
+/**
+ * Lists any required Firebase Web App config keys that are missing or placeholders.
+ */
+export function getMissingFirebaseFields() {
+  const cfg = getFirebaseConfig();
+  return REQUIRED_KEYS.filter((key) => isPlaceholderValue(cfg[key]));
+}
+
 /**
  * Returns true when real Firebase Web credentials have been configured.
  */
 export function isFirebaseConfigured() {
-  return Boolean(
-    FIREBASE_CONFIG.apiKey &&
-    !FIREBASE_CONFIG.apiKey.startsWith("YOUR_") &&
-    FIREBASE_CONFIG.projectId &&
-    !FIREBASE_CONFIG.projectId.startsWith("YOUR_") &&
-    FIREBASE_CONFIG.appId &&
-    !FIREBASE_CONFIG.appId.startsWith("YOUR_")
-  );
+  return getMissingFirebaseFields().length === 0;
 }
