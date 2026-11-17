@@ -7,7 +7,7 @@
  * SECURITY NOTE:
  * Never place Firebase Admin SDK credentials, serviceAccountKey.json, or
  * private server secrets in frontend files. Firebase Web config values are
- * public identifiers secured by Firebase Security Rules (see /firestore.rules).
+ * public identifiers secured by Firebase Security Rules.
  */
 
 export const FIREBASE_CONFIG = {
@@ -24,6 +24,13 @@ export const FIREBASE_CONFIG = {
  * Leave as "(default)" unless you created a named Firestore database.
  */
 export const FIRESTORE_DATABASE_ID = "(default)";
+
+/**
+ * Optional domain used when an admin signs in with a plain username
+ * (e.g. "fahad" -> "fahad@fahaddev.admin") instead of a full email address.
+ * Leave empty ("") if admins sign in with their Firebase Auth email address.
+ */
+export const ADMIN_USERNAME_DOMAIN = "";
 
 /**
  * Returns true when real Firebase Web credentials have been configured.

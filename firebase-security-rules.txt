@@ -3,7 +3,7 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // =========================================================================
-    // FAHAD DEV — Hardened Firestore Security Rules (Phase 1 Foundation)
+    // FAHAD DEV — Hardened Zero-Trust Firestore Security Rules
     // =========================================================================
 
     function isSignedIn() {
@@ -33,64 +33,87 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
-    // Settings Collection
+    // Public Website Settings
     // -------------------------------------------------------------------------
     match /settings/{docId} {
-      // Public can read public website settings
       allow read: if docId in [
         'site', 'public', 'hero', 'social', 'announcement',
         'community', 'ads', 'seo', 'maintenance'
       ] || isAdmin();
 
-      // Sensitive docs (ads scripts, site customCss/customJs) restricted to Owner
       allow write: if isOwner() && docId in [
         'site', 'public', 'hero', 'social', 'announcement',
         'community', 'ads', 'seo', 'maintenance'
       ];
 
-      // Editors may update non-script content settings (hero, social, announcement, community, seo)
       allow write: if isEditorOrOwner() && docId in [
         'hero', 'social', 'announcement', 'community', 'seo', 'maintenance'
       ];
     }
 
     // -------------------------------------------------------------------------
-    // Navigation Menu
+    // Navigation Menu & Social Links
     // -------------------------------------------------------------------------
     match /menu/{menuId} {
       allow read: if (!('visible' in resource.data) || resource.data.visible == true) || isAdmin();
       allow write: if isEditorOrOwner();
     }
 
+    match /social/{socialId} {
+      allow read: if (!('enabled' in resource.data) || resource.data.enabled == true) || isAdmin();
+      allow write: if isEditorOrOwner();
+    }
+
     // -------------------------------------------------------------------------
-    // Categories & Nested Versions Subcollection
+    // Categories & Nested Versions / Links
     // -------------------------------------------------------------------------
     match /categories/{categoryId} {
-      allow read: if (!('visible' in resource.data) || resource.data.visible == true) || isAdmin();
+      allow read: if (!('visible' in resource.data) || resource.data.visible == true)
+                  || (!('published' in resource.data) || resource.data.published == true)
+                  || isAdmin();
       allow write: if isEditorOrOwner();
 
       match /versions/{versionId} {
-        allow read: if (!('visible' in resource.data) || resource.data.visible == true) || isAdmin();
+        allow read: if (!('visible' in resource.data) || resource.data.visible == true)
+                    || (!('published' in resource.data) || resource.data.published == true)
+                    || isAdmin();
         allow write: if isEditorOrOwner();
 
         match /links/{linkId} {
-          allow read: if (!('active' in resource.data) || resource.data.active == true) || isAdmin();
+          allow read: if (!('active' in resource.data) || resource.data.active == true)
+                      || (!('enabled' in resource.data) || resource.data.enabled == true)
+                      || isAdmin();
           allow write: if isEditorOrOwner();
         }
       }
     }
 
     // -------------------------------------------------------------------------
-    // Admins Registry (Owner-managed, self-readable)
+    // Users Directory (User Management: Total Users, Active Users)
+    // -------------------------------------------------------------------------
+    match /users/{userId} {
+      allow read: if (isSignedIn() && request.auth.uid == userId) || isAdmin();
+      allow create, update: if (isSignedIn() && request.auth.uid == userId &&
+        request.resource.data.keys().hasOnly(['name', 'email', 'active', 'lastActiveAt']))
+        || isOwner()
+        || (isEditorOrOwner() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['active', 'status', 'updatedAt']));
+      allow delete: if isOwner();
+    }
+
+    // -------------------------------------------------------------------------
+    // Admins Registry (Protected Backend Boundary)
     // -------------------------------------------------------------------------
     match /admins/{uid} {
       allow read: if (isSignedIn() && request.auth.uid == uid) || isAdmin();
-      allow create, update: if isOwner() &&
-        request.resource.data.keys().hasOnly(['role', 'name', 'email', 'avatar', 'updatedAt']) &&
+      allow create: if isOwner() &&
+        request.resource.data.keys().hasOnly(['role', 'name', 'username', 'email', 'avatar', 'active', 'updatedAt']) &&
         request.resource.data.role in ['owner', 'editor', 'viewer'] &&
         isValidString(request.resource.data.name, 80) &&
         isValidString(request.resource.data.email, 160);
-      // Prevent owner from accidentally deleting their own record
+      allow update: if (isOwner() || (isSignedIn() && request.auth.uid == uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'avatar', 'updatedAt']))) &&
+        request.resource.data.role in ['owner', 'editor', 'viewer'];
+      // Never allow an owner to delete their own admin access
       allow delete: if isOwner() && request.auth.uid != uid;
     }
 
@@ -107,14 +130,23 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
-    // Stats Collection (Admin read; restricted updates; public cannot tamper)
+    // Stats & Analytics
     // -------------------------------------------------------------------------
     match /stats/{day} {
       allow read: if isAdmin();
       allow write: if isOwner();
     }
 
-    // Deny everything else by default
+    match /analytics/{eventId} {
+      allow read, update, delete: if isAdmin();
+      allow create: if
+        request.resource.data.keys().hasOnly([
+          'type', 'categoryId', 'versionId', 'linkId', 'platform', 'createdAt'
+        ]) &&
+        request.resource.data.type in ['download_click', 'view_category', 'view_version', 'share_click'] &&
+        request.resource.data.createdAt == request.time;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

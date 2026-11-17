@@ -49,9 +49,10 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url);
 
-  // Never intercept Firebase, Google APIs, or external analytics/ads requests
+  // Never intercept Firebase, Google APIs, or hidden/admin routes
   if (
     url.origin !== self.location.origin ||
+    url.pathname.includes('/FAHAD/admin') ||
     url.pathname.startsWith('/admin')
   ) {
     return;

@@ -3,62 +3,139 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // =========================================================================
-    // FAHAD DEV — Zero-Trust Firestore Security Rules
+    // FAHAD DEV — Hardened Zero-Trust Firestore Security Rules
     // =========================================================================
-    // Helper: Verify authenticated admin role via custom claim or admins/{uid}
-    function isAuthenticated() {
+
+    function isSignedIn() {
       return request.auth != null;
     }
 
+    function adminDoc() {
+      return get(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
     function isAdmin() {
-      return isAuthenticated() && (
-        request.auth.token.admin == true ||
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
-      );
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+        adminDoc().data.role in ['owner', 'editor', 'viewer'];
     }
 
-    function isValidNonEmptyString(val, maxLen) {
-      return val is string && val.size() > 0 && val.size() <= maxLen;
+    function isOwner() {
+      return isAdmin() && adminDoc().data.role == 'owner';
+    }
+
+    function isEditorOrOwner() {
+      return isAdmin() && adminDoc().data.role in ['owner', 'editor'];
+    }
+
+    function isValidString(val, maxLen) {
+      return val is string && val.size() <= maxLen;
     }
 
     // -------------------------------------------------------------------------
-    // Public Website Configuration & Content (Read-Only for Public, Admin Write)
+    // Public Website Settings
     // -------------------------------------------------------------------------
-    match /settings/{settingId} {
-      allow read: if settingId in [
-        'public', 'seo', 'ads', 'community', 'maintenance', 'announcement'
+    match /settings/{docId} {
+      allow read: if docId in [
+        'site', 'public', 'hero', 'social', 'announcement',
+        'community', 'ads', 'seo', 'maintenance'
+      ] || isAdmin();
+
+      allow write: if isOwner() && docId in [
+        'site', 'public', 'hero', 'social', 'announcement',
+        'community', 'ads', 'seo', 'maintenance'
       ];
-      allow write: if isAdmin();
+
+      allow write: if isEditorOrOwner() && docId in [
+        'hero', 'social', 'announcement', 'community', 'seo', 'maintenance'
+      ];
     }
 
+    // -------------------------------------------------------------------------
+    // Navigation Menu & Social Links
+    // -------------------------------------------------------------------------
     match /menu/{menuId} {
-      allow read: if !('enabled' in resource.data) || resource.data.enabled == true || isAdmin();
-      allow write: if isAdmin();
+      allow read: if (!('visible' in resource.data) || resource.data.visible == true) || isAdmin();
+      allow write: if isEditorOrOwner();
     }
 
     match /social/{socialId} {
-      allow read: if !('enabled' in resource.data) || resource.data.enabled == true || isAdmin();
-      allow write: if isAdmin();
+      allow read: if (!('enabled' in resource.data) || resource.data.enabled == true) || isAdmin();
+      allow write: if isEditorOrOwner();
     }
 
+    // -------------------------------------------------------------------------
+    // Categories & Nested Versions / Links
+    // -------------------------------------------------------------------------
     match /categories/{categoryId} {
-      allow read: if !('published' in resource.data) || resource.data.published == true || isAdmin();
-      allow write: if isAdmin();
+      allow read: if (!('visible' in resource.data) || resource.data.visible == true)
+                  || (!('published' in resource.data) || resource.data.published == true)
+                  || isAdmin();
+      allow write: if isEditorOrOwner();
 
       match /versions/{versionId} {
-        allow read: if !('published' in resource.data) || resource.data.published == true || isAdmin();
-        allow write: if isAdmin();
+        allow read: if (!('visible' in resource.data) || resource.data.visible == true)
+                    || (!('published' in resource.data) || resource.data.published == true)
+                    || isAdmin();
+        allow write: if isEditorOrOwner();
 
         match /links/{linkId} {
-          allow read: if !('enabled' in resource.data) || resource.data.enabled == true || isAdmin();
-          allow write: if isAdmin();
+          allow read: if (!('active' in resource.data) || resource.data.active == true)
+                      || (!('enabled' in resource.data) || resource.data.enabled == true)
+                      || isAdmin();
+          allow write: if isEditorOrOwner();
         }
       }
     }
 
     // -------------------------------------------------------------------------
-    // Analytics: Append-only validated event creation; no public read/update/delete
+    // Users Directory (User Management: Total Users, Active Users)
     // -------------------------------------------------------------------------
+    match /users/{userId} {
+      allow read: if (isSignedIn() && request.auth.uid == userId) || isAdmin();
+      allow create, update: if (isSignedIn() && request.auth.uid == userId &&
+        request.resource.data.keys().hasOnly(['name', 'email', 'active', 'lastActiveAt']))
+        || isOwner()
+        || (isEditorOrOwner() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['active', 'status', 'updatedAt']));
+      allow delete: if isOwner();
+    }
+
+    // -------------------------------------------------------------------------
+    // Admins Registry (Protected Backend Boundary)
+    // -------------------------------------------------------------------------
+    match /admins/{uid} {
+      allow read: if (isSignedIn() && request.auth.uid == uid) || isAdmin();
+      allow create: if isOwner() &&
+        request.resource.data.keys().hasOnly(['role', 'name', 'username', 'email', 'avatar', 'active', 'updatedAt']) &&
+        request.resource.data.role in ['owner', 'editor', 'viewer'] &&
+        isValidString(request.resource.data.name, 80) &&
+        isValidString(request.resource.data.email, 160);
+      allow update: if (isOwner() || (isSignedIn() && request.auth.uid == uid &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'avatar', 'updatedAt']))) &&
+        request.resource.data.role in ['owner', 'editor', 'viewer'];
+      allow delete: if isOwner() && request.auth.uid != uid;
+    }
+
+    // -------------------------------------------------------------------------
+    // Activity Logs (Admins read; Editors/Owners append-only)
+    // -------------------------------------------------------------------------
+    match /logs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isEditorOrOwner() &&
+        request.resource.data.keys().hasOnly(['admin', 'adminUid', 'action', 'before', 'after', 'time']) &&
+        request.resource.data.adminUid == request.auth.uid &&
+        request.resource.data.time == request.time;
+      allow update, delete: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // Stats & Analytics
+    // -------------------------------------------------------------------------
+    match /stats/{day} {
+      allow read: if isAdmin();
+      allow write: if isOwner();
+    }
+
     match /analytics/{eventId} {
       allow read, update, delete: if isAdmin();
       allow create: if
@@ -66,19 +143,11 @@ service cloud.firestore {
           'type', 'categoryId', 'versionId', 'linkId', 'platform', 'createdAt'
         ]) &&
         request.resource.data.type in ['download_click', 'view_category', 'view_version', 'share_click'] &&
-        isValidNonEmptyString(request.resource.data.categoryId, 80) &&
-        (!('versionId' in request.resource.data) || isValidNonEmptyString(request.resource.data.versionId, 80)) &&
-        (!('linkId' in request.resource.data) || isValidNonEmptyString(request.resource.data.linkId, 80)) &&
-        (!('platform' in request.resource.data) || isValidNonEmptyString(request.resource.data.platform, 40)) &&
         request.resource.data.createdAt == request.time;
     }
 
-    // -------------------------------------------------------------------------
-    // Admin Registry (Protected)
-    // -------------------------------------------------------------------------
-    match /admins/{uid} {
-      allow read: if isAuthenticated() && request.auth.uid == uid;
-      allow write: if false; // Manage admin claims/documents strictly via Firebase Admin SDK / Console
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

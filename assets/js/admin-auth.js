@@ -1,13 +1,19 @@
 /**
- * FAHAD DEV Admin — Firebase Auth & admins/{uid} Role Verification
+ * FAHAD DEV Admin — Backend Firebase Auth, Username/Email Resolution,
+ * Rate Limiting / Lockout, Session Management & admins/{uid} Verification
  */
 
-import { FIREBASE_CONFIG, FIRESTORE_DATABASE_ID, isFirebaseConfigured } from "./firebase-config.js";
-import { mapAuthErrorToMessage } from "./admin-ui.js";
+import {
+  ADMIN_USERNAME_DOMAIN,
+  FIREBASE_CONFIG,
+  FIRESTORE_DATABASE_ID,
+  isFirebaseConfigured
+} from "./firebase-config.js";
+import { ADMIN_I18N, mapAuthErrorToMessage } from "./admin-ui.js";
 
-const LOCKOUT_KEY = "fahad_admin_login_attempts";
+const LOCKOUT_KEY = "fahad_admin_login_attempts_v2";
 const MAX_ATTEMPTS = 5;
-const LOCKOUT_MS = 60_000;
+const BASE_LOCKOUT_MS = 60_000;
 
 export class AdminAuthService {
   constructor() {
@@ -42,25 +48,56 @@ export class AdminAuthService {
     return { configured: true };
   }
 
-  getLockoutRemainingMs() {
+  resolveAuthEmail(identifier) {
+    const clean = String(identifier || "").trim();
+    if (!clean) return { ok: false, error: "empty" };
+    if (clean.includes("@")) return { ok: true, email: clean };
+    if (ADMIN_USERNAME_DOMAIN && ADMIN_USERNAME_DOMAIN.trim()) {
+      const domain = ADMIN_USERNAME_DOMAIN.trim().replace(/^@/, "");
+      return { ok: true, email: `${clean}@${domain}` };
+    }
+    return { ok: false, error: "username_needs_domain" };
+  }
+
+  getAttemptState() {
     try {
       const raw = JSON.parse(localStorage.getItem(LOCKOUT_KEY) || "{}");
-      if (raw.lockedUntil && Date.now() < raw.lockedUntil) {
-        return raw.lockedUntil - Date.now();
-      }
-      return 0;
+      return {
+        count: Number(raw.count || 0),
+        strikes: Number(raw.strikes || 0),
+        lockedUntil: Number(raw.lockedUntil || 0)
+      };
     } catch {
-      return 0;
+      return { count: 0, strikes: 0, lockedUntil: 0 };
     }
   }
 
+  getLockoutRemainingMs() {
+    const st = this.getAttemptState();
+    return st.lockedUntil > Date.now() ? st.lockedUntil - Date.now() : 0;
+  }
+
+  getRemainingAttempts() {
+    const st = this.getAttemptState();
+    return Math.max(0, MAX_ATTEMPTS - st.count);
+  }
+
   recordFailedAttempt() {
-    try {
-      const raw = JSON.parse(localStorage.getItem(LOCKOUT_KEY) || "{}");
-      const count = (raw.count || 0) + 1;
-      const lockedUntil = count >= MAX_ATTEMPTS ? Date.now() + LOCKOUT_MS : 0;
-      localStorage.setItem(LOCKOUT_KEY, JSON.stringify({ count: lockedUntil ? 0 : count, lockedUntil }));
-    } catch {}
+    const st = this.getAttemptState();
+    const nextCount = st.count + 1;
+    if (nextCount >= MAX_ATTEMPTS) {
+      const nextStrikes = st.strikes + 1;
+      const duration = BASE_LOCKOUT_MS * Math.min(4, nextStrikes);
+      localStorage.setItem(
+        LOCKOUT_KEY,
+        JSON.stringify({ count: 0, strikes: nextStrikes, lockedUntil: Date.now() + duration })
+      );
+    } else {
+      localStorage.setItem(
+        LOCKOUT_KEY,
+        JSON.stringify({ count: nextCount, strikes: st.strikes, lockedUntil: 0 })
+      );
+    }
   }
 
   clearFailedAttempts() {
@@ -75,7 +112,7 @@ export class AdminAuthService {
         return;
       }
       const adminProfile = await this.fetchAdminProfile(user.uid);
-      if (!adminProfile) {
+      if (!adminProfile || adminProfile.active === false) {
         await this.authMod.signOut(this.auth);
         callback({ unauthorized: true, user });
         return;
@@ -95,9 +132,11 @@ export class AdminAuthService {
       return {
         uid,
         role,
-        name: data.name || "Admin",
+        name: data.name || data.username || "Admin",
+        username: data.username || "",
         email: data.email || "",
-        avatar: data.avatar || ""
+        avatar: data.avatar || "",
+        active: data.active !== false
       };
     } catch (err) {
       console.warn("[AdminAuth] Failed to read admins/{uid}:", err);
@@ -105,10 +144,19 @@ export class AdminAuthService {
     }
   }
 
-  async signIn(email, password, rememberMe, lang = "en") {
+  async signIn(identifier, password, rememberMe, lang = "en") {
     if (!this.auth || !this.authMod) {
       throw new Error("Firebase is not initialized.");
     }
+
+    const resolved = this.resolveAuthEmail(identifier);
+    if (!resolved.ok) {
+      return {
+        ok: false,
+        message: ADMIN_I18N[lang]?.usernameNeedsDomain || ADMIN_I18N.en.usernameNeedsDomain
+      };
+    }
+
     const {
       setPersistence,
       browserLocalPersistence,
@@ -122,10 +170,11 @@ export class AdminAuthService {
     );
 
     try {
-      const cred = await signInWithEmailAndPassword(this.auth, email.trim(), password);
+      const cred = await signInWithEmailAndPassword(this.auth, resolved.email, password);
       const profile = await this.fetchAdminProfile(cred.user.uid);
-      if (!profile) {
+      if (!profile || profile.active === false) {
         await this.authMod.signOut(this.auth);
+        this.recordFailedAttempt();
         return { ok: false, reason: "not_admin" };
       }
       this.clearFailedAttempts();
@@ -136,10 +185,17 @@ export class AdminAuthService {
     }
   }
 
-  async resetPassword(email, lang = "en") {
+  async resetPassword(identifier, lang = "en") {
     if (!this.auth || !this.authMod) throw new Error("Firebase not initialized");
+    const resolved = this.resolveAuthEmail(identifier);
+    if (!resolved.ok) {
+      return {
+        ok: false,
+        message: ADMIN_I18N[lang]?.enterEmailFirst || ADMIN_I18N.en.enterEmailFirst
+      };
+    }
     try {
-      await this.authMod.sendPasswordResetEmail(this.auth, email.trim());
+      await this.authMod.sendPasswordResetEmail(this.auth, resolved.email);
       return { ok: true };
     } catch (err) {
       return { ok: false, message: mapAuthErrorToMessage(err, lang) };

@@ -1,17 +1,17 @@
 /**
- * FAHAD DEV Admin — Phase 1 Site Settings Module (settings/site)
+ * FAHAD DEV Admin — Website Settings Module (settings/site & settings/maintenance)
  * Supports color pickers, Owner-restricted customCss/customJs, Save Draft,
  * Publish to Firestore + Activity Logging, and isolated Live Preview.
  */
 
-import { escapeHtml, safeUrlOrEmpty, showAdminToast } from "./admin-ui.js";
+import { escapeHtml, getSiteRoot, safeUrlOrEmpty, showAdminToast } from "./admin-ui.js";
 
 const DRAFT_KEY = "fahad_admin_site_settings_draft";
 
 const DEFAULT_SITE_SETTINGS = {
   siteName: "FAHAD DEV",
-  logo: "../assets/img/logo.svg",
-  favicon: "../assets/img/favicon.png",
+  logo: "./assets/img/logo.svg",
+  favicon: "./assets/img/favicon.png",
   title: "FAHAD DEV — Futuristic 3D Developer Portfolio & Resource Hub",
   description: "Explore free website templates, APK builds, bots, security guides, API tools, and PC utilities.",
   theme: "dark",
@@ -99,7 +99,7 @@ export class AdminSettingsModule {
   saveDraft() {
     localStorage.setItem(DRAFT_KEY, JSON.stringify(this.form));
     const isBn = this.getLang() === "bn";
-    showAdminToast(isBn ? "ড্রাফট লোকালি সংরক্ষিত হয়েছে।" : "Draft saved locally.", "info");
+    showAdminToast(isBn ? "ড্রাফট লোকালি সংরক্ষিত হয়েছে।" : "Draft saved locally.", "info");
   }
 
   async publish() {
@@ -124,7 +124,6 @@ export class AdminSettingsModule {
       return;
     }
 
-    // Validate optional URL fields if non-empty and external
     for (const urlField of ["logo", "favicon"]) {
       const val = (this.form[urlField] || "").trim();
       if (val && !val.startsWith("./") && !val.startsWith("../") && !safeUrlOrEmpty(val)) {
@@ -172,14 +171,14 @@ export class AdminSettingsModule {
       localStorage.removeItem(DRAFT_KEY);
       this.hasUnsavedChanges = false;
       this.persisted = { ...this.form };
-      showAdminToast(isBn ? "Firestore-এ সফলভাবে পাবলিশ হয়েছে!" : "Published to Firestore successfully!", "success");
+      showAdminToast(isBn ? "Firestore-এ সফলভাবে পাবলিশ হয়েছে!" : "Published to Firestore successfully!", "success");
 
       const iframe = this.container?.querySelector("#site-preview-iframe");
-      if (iframe) iframe.src = `../index.html?preview=${Date.now()}`;
+      if (iframe) iframe.src = `${getSiteRoot()}index.html?preview=${Date.now()}`;
     } catch (err) {
       console.error("[SiteSettings] Publish error:", err);
       showAdminToast(
-        isBn ? `পাবলিশ ব্যর্থ হয়েছে: ${err.message}` : `Publish failed: ${err.message}`,
+        isBn ? `পাবলিশ ব্যর্থ হয়েছে: ${err.message}` : `Publish failed: ${err.message}`,
         "error"
       );
     } finally {
@@ -194,6 +193,7 @@ export class AdminSettingsModule {
     const profile = this.getAdminProfile();
     const isOwner = profile?.role === "owner";
     const isViewer = profile?.role === "viewer";
+    const siteHomeUrl = `${getSiteRoot()}index.html`;
 
     this.container.innerHTML = `
       <div class="glass-card sticky-save-bar">
@@ -216,7 +216,7 @@ export class AdminSettingsModule {
       <div class="settings-layout">
         <form id="site-settings-form" class="glass-card panel-card" onsubmit="return false;">
           <div class="panel-head">
-            <h2>${isBn ? "সাইট কনফিগারেশন" : "General & Theme Settings"}</h2>
+            <h2>${isBn ? "ওয়েবসাইট সেটিংস" : "Website Settings"}</h2>
             <span class="role-pill">${escapeHtml(profile?.role || "viewer")}</span>
           </div>
 
@@ -265,7 +265,6 @@ export class AdminSettingsModule {
               <input id="ss-footer" type="text" value="${escapeHtml(this.form.footer)}" data-field="footer" />
             </div>
 
-            <!-- Theme Color Pickers -->
             <div class="field">
               <label for="ss-primary">${isBn ? "প্রাইমারি কালার" : "Primary Color"}</label>
               <div class="color-field">
@@ -295,7 +294,6 @@ export class AdminSettingsModule {
               </div>
             </div>
 
-            <!-- Switches -->
             <div class="toggle-row full">
               <span>${isBn ? "ব্লু ভেরিফাইড ব্যাজ দেখান" : "Show Blue Verified Badge"}</span>
               <input type="checkbox" data-check="verifiedBadge" ${this.form.verifiedBadge ? "checked" : ""} />
@@ -309,7 +307,6 @@ export class AdminSettingsModule {
               <input type="checkbox" data-check="maintenance" ${this.form.maintenance ? "checked" : ""} />
             </div>
 
-            <!-- Owner-Restricted Custom CSS / JS -->
             <div class="field full">
               <label for="ss-css">
                 <span>Custom CSS</span>
@@ -320,7 +317,7 @@ export class AdminSettingsModule {
             <div class="field full">
               <label for="ss-js">
                 <span>Custom JS</span>
-                <span style="font-size:11px;color:var(--gold);">${isOwner ? "Owner Only • Never auto-executed here" : "Locked (Owner Only)"}</span>
+                <span style="font-size:11px;color:var(--gold);">${isOwner ? "Owner Only • Isolated" : "Locked (Owner Only)"}</span>
               </label>
               <textarea id="ss-js" data-field="customJs" ${isOwner ? "" : "disabled"} placeholder="// Trusted owner script configuration">${escapeHtml(this.form.customJs)}</textarea>
             </div>
@@ -342,7 +339,7 @@ export class AdminSettingsModule {
           <div class="preview-frame-wrap ${this.previewMode === "mobile" ? "mobile-mode" : ""}">
             <iframe
               id="site-preview-iframe"
-              src="../index.html"
+              src="${escapeHtml(siteHomeUrl)}"
               title="FAHAD DEV Live Website Preview"
               sandbox="allow-scripts"
               loading="lazy">
@@ -375,7 +372,7 @@ export class AdminSettingsModule {
 
     this.container.querySelector("#refresh-preview-btn")?.addEventListener("click", () => {
       const iframe = this.container.querySelector("#site-preview-iframe");
-      if (iframe) iframe.src = `../index.html?preview=${Date.now()}`;
+      if (iframe) iframe.src = `${getSiteRoot()}index.html?preview=${Date.now()}`;
     });
 
     this.container.querySelector("#btn-save-draft")?.addEventListener("click", () => this.saveDraft());

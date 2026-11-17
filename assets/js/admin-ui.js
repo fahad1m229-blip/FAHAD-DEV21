@@ -1,48 +1,63 @@
 /**
- * FAHAD DEV Admin — UI Helpers, Bilingual Dictionary (EN/BN), Toast & Modals
+ * FAHAD DEV Admin — UI Helpers, Path Resolution, Bilingual Dictionary (EN/BN)
  */
 
 import { validateSafeUrl } from "./firebase-service.js";
 
+/**
+ * Resolves the public User Panel root path regardless of whether the site is
+ * hosted at domain root (/) or a GitHub Pages subpath (/repo/).
+ */
+export function getSiteRoot() {
+  const path = window.location.pathname;
+  const idx = path.indexOf("/FAHAD/admin");
+  if (idx !== -1) {
+    return path.slice(0, idx) + "/";
+  }
+  const legacyIdx = path.indexOf("/admin");
+  if (legacyIdx !== -1) {
+    return path.slice(0, legacyIdx) + "/";
+  }
+  return "/";
+}
+
+export function getAdminBasePath() {
+  const root = getSiteRoot();
+  return `${root}FAHAD/admin`;
+}
+
 export const ADMIN_I18N = {
   en: {
     loginTitle: "FAHAD DEV ADMIN",
-    loginSubtitle: "Sign in with your authorized Firebase administrator account.",
-    emailLabel: "Admin Email",
-    passwordLabel: "Password",
+    loginSubtitle: "Restricted Gateway • Authenticate to access protected admin routes.",
+    emailLabel: "Admin Username or Email",
+    passwordLabel: "Admin Password",
     rememberMe: "Remember me",
     forgotPassword: "Forgot password?",
-    signInBtn: "Sign In to Dashboard",
+    signInBtn: "Authenticate & Enter",
     signingIn: "Verifying credentials...",
     resetSent: "Password reset email sent. Check your inbox.",
-    enterEmailFirst: "Enter your admin email first to reset password.",
-    lockoutWait: "Too many failed attempts in this browser. Please wait before trying again. (Note: Server-side protection is enforced by Firebase Auth & Firestore Security Rules.)",
-    notAdminError: "Access Denied: Your account UID is not registered in the Firestore admins collection.",
+    enterEmailFirst: "Enter your admin email address first to reset password.",
+    usernameNeedsDomain: "Enter your Firebase Admin email address (or configure ADMIN_USERNAME_DOMAIN in firebase-config.js).",
+    lockoutWait: "Too many failed login attempts. Temporarily locked for security.",
+    notAdminError: "Unauthorized Access: Your account is not registered in the Firestore admins collection.",
     firebaseNotConfigured: "Configure /assets/js/firebase-config.js with your Firebase Web App credentials before signing in.",
-    dashboard: "Dashboard",
-    siteSettings: "Site Settings",
-    heroContent: "Hero & Content",
-    categories: "Categories",
-    versionsLinks: "Versions & Links",
-    menuManager: "Menu Manager",
-    adsManager: "Ads Manager",
-    communityPopup: "Community Popup",
-    announcement: "Announcement",
-    socialLinks: "Social Links",
-    analytics: "Analytics",
-    adminUsers: "Admin Users & Roles",
-    backupLogs: "Backup & Logs",
-    seo: "SEO",
+    overview: "Overview",
+    dashboard: "Overview",
+    userManagement: "User Management",
+    contentManagement: "Content Management",
+    siteSettings: "Website Settings",
+    adminProfile: "Admin Profile",
+    totalUsers: "Total Users",
+    activeUsers: "Active Users",
     totalCategories: "Total Categories",
     totalVersions: "Total Versions",
     totalLinks: "Total Links",
     todayVisitors: "Today's Visitors",
     totalDownloads: "Total Download Clicks",
     websiteStatus: "Website Status",
-    maintenanceStatus: "Maintenance Status",
     online: "Live",
     maintenanceOn: "Maintenance ON",
-    maintenanceOff: "Normal",
     noStatsYet: "No live stats/{day} records yet",
     recentActivities: "Recent Activities",
     quickActions: "Quick Actions",
@@ -50,61 +65,46 @@ export const ADMIN_I18N = {
     systemStatus: "System Status",
     saveDraft: "Save Draft",
     publish: "Publish Changes",
-    draftSaved: "Draft saved locally.",
-    publishedOk: "Published to Firestore successfully!",
-    readOnlyViewer: "Viewer role is read-only. Changes cannot be published.",
-    ownerOnlyScript: "Custom CSS/JS is restricted to Owner accounts only.",
-    unsavedPrompt: "You have unpublished changes in Site Settings. Leave without publishing?",
-    phaseLockedMsg: "This module will be unlocked in the next implementation phase.",
-    viewWebsite: "View Website",
+    unsavedPrompt: "You have unpublished changes in Website Settings. Leave without publishing?",
+    viewWebsite: "View User Panel",
     refreshData: "Refresh Data",
     clearCache: "Clear Cache",
     maintenanceMode: "Maintenance Mode",
-    backupDownload: "Backup Download",
-    restoreBackup: "Restore Backup",
-    activityLog: "Activity Log",
-    help: "Help",
+    help: "Security Info",
     logout: "Logout",
-    autoLoggedOut: "Session expired due to inactivity. Please sign in again."
+    autoLoggedOut: "Session expired due to inactivity. Redirected to login."
   },
   bn: {
     loginTitle: "FAHAD DEV অ্যাডমিন",
-    loginSubtitle: "আপনার অনুমোদিত Firebase অ্যাডমিন অ্যাকাউন্ট দিয়ে সাইন ইন করুন।",
-    emailLabel: "অ্যাডমিন ইমেইল",
-    passwordLabel: "পাসওয়ার্ড",
+    loginSubtitle: "সুরক্ষিত গেটওয়ে • অ্যাডমিন ড্যাশবোর্ডে প্রবেশ করতে প্রমাণীকরণ করুন।",
+    emailLabel: "অ্যাডমিন ইউজারনেম বা ইমেইল",
+    passwordLabel: "অ্যাডমিন পাসওয়ার্ড",
     rememberMe: "আমাকে মনে রাখুন",
-    forgotPassword: "পাসওয়ার্ড ভুলে গেছেন?",
-    signInBtn: "ড্যাশবোর্ডে প্রবেশ করুন",
+    forgotPassword: "পাসওয়ার্ড ভুলে গেছেন?",
+    signInBtn: "লগইন করুন",
     signingIn: "যাচাই করা হচ্ছে...",
-    resetSent: "পাসওয়ার্ড রিসেট ইমেইল পাঠানো হয়েছে। ইনবক্স চেক করুন।",
-    enterEmailFirst: "পাসওয়ার্ড রিসেট করতে প্রথমে আপনার ইমেইল লিখুন।",
-    lockoutWait: "অনেকবার ভুল চেষ্টা হয়েছে। অনুগ্রহ করে কিছুক্ষণ অপেক্ষা করুন। (নোট: সার্ভার-সাইড সুরক্ষা Firebase Auth এবং Firestore Rules দ্বারা নিয়ন্ত্রিত।)",
-    notAdminError: "অ্যাক্সেস অনুমোদিত নয়: আপনার UID Firestore-এর admins কালেকশনে নিবন্ধিত নেই।",
+    resetSent: "পাসওয়ার্ড রিসেট ইমেইল পাঠানো হয়েছে। ইনবক্স চেক করুন।",
+    enterEmailFirst: "পাসওয়ার্ড রিসেট করতে প্রথমে আপনার অ্যাডমিন ইমেইল লিখুন।",
+    usernameNeedsDomain: "Firebase Admin ইমেইল লিখুন (অথবা firebase-config.js-এ ADMIN_USERNAME_DOMAIN সেট করুন)।",
+    lockoutWait: "অতিরিক্ত ভুল লগইন চেষ্টার কারণে সাময়িকভাবে লক করা হয়েছে।",
+    notAdminError: "অননুমোদিত অ্যাক্সেস: আপনার অ্যাকাউন্ট Firestore admins কালেকশনে অনুমোদিত নয়।",
     firebaseNotConfigured: "সাইন ইন করার আগে /assets/js/firebase-config.js ফাইলে আপনার Firebase Web কনফিগ যোগ করুন।",
-    dashboard: "ড্যাশবোর্ড",
-    siteSettings: "সাইট সেটিংস",
-    heroContent: "হিরো ও কন্টেন্ট",
-    categories: "ক্যাটাগরি",
-    versionsLinks: "ভার্সন ও লিংক",
-    menuManager: "মেনু ম্যানেজার",
-    adsManager: "বিজ্ঞাপন ম্যানেজার",
-    communityPopup: "কমিউনিটি পপআপ",
-    announcement: "ঘোষণা বার",
-    socialLinks: "সোশ্যাল লিংক",
-    analytics: "অ্যানালিটিক্স",
-    adminUsers: "অ্যাডমিন ও রোল",
-    backupLogs: "ব্যাকআপ ও লগ",
-    seo: "এসইও (SEO)",
+    overview: "ওভারভিউ",
+    dashboard: "ওভারভিউ",
+    userManagement: "ইউজার ম্যানেজমেন্ট",
+    contentManagement: "কন্টেন্ট ম্যানেজমেন্ট",
+    siteSettings: "ওয়েবসাইট সেটিংস",
+    adminProfile: "অ্যাডমিন প্রোফাইল",
+    totalUsers: "মোট ইউজার",
+    activeUsers: "সক্রিয় ইউজার",
     totalCategories: "মোট ক্যাটাগরি",
     totalVersions: "মোট ভার্সন",
     totalLinks: "মোট লিংক",
     todayVisitors: "আজকের ভিজিটর",
     totalDownloads: "মোট ডাউনলোড ক্লিক",
     websiteStatus: "ওয়েবসাইট স্ট্যাটাস",
-    maintenanceStatus: "মেইনটেন্যান্স স্ট্যাটাস",
     online: "লাইভ",
     maintenanceOn: "মেইনটেন্যান্স চালু",
-    maintenanceOff: "স্বাভাবিক",
     noStatsYet: "এখনো stats/{day} লাইভ ডেটা নেই",
     recentActivities: "সাম্প্রতিক কার্যক্রম",
     quickActions: "দ্রুত অ্যাকশন",
@@ -112,22 +112,14 @@ export const ADMIN_I18N = {
     systemStatus: "সিস্টেম স্ট্যাটাস",
     saveDraft: "ড্রাফট সংরক্ষণ",
     publish: "পাবলিশ করুন",
-    draftSaved: "ড্রাফট লোকালি সংরক্ষিত হয়েছে।",
-    publishedOk: "Firestore-এ সফলভাবে পাবলিশ হয়েছে!",
-    readOnlyViewer: "Viewer রোল শুধুমাত্র দেখার জন্য; পরিবর্তন পাবলিশ করা যাবে না।",
-    ownerOnlyScript: "Custom CSS/JS শুধুমাত্র Owner অ্যাকাউন্টের জন্য সংরক্ষিত।",
-    unsavedPrompt: "সাইট সেটিংসে অপ্রকাশিত পরিবর্তন রয়েছে। সেভ না করেই চলে যাবেন?",
-    phaseLockedMsg: "এই মডিউলটি পরবর্তী ধাপে যুক্ত করা হবে।",
-    viewWebsite: "ওয়েবসাইট দেখুন",
+    unsavedPrompt: "ওয়েবসাইট সেটিংসে অপ্রকাশিত পরিবর্তন রয়েছে। সেভ না করেই চলে যাবেন?",
+    viewWebsite: "ইউজার প্যানেল দেখুন",
     refreshData: "ডেটা রিফ্রেশ",
     clearCache: "ক্যাশ পরিষ্কার",
     maintenanceMode: "মেইনটেন্যান্স মোড",
-    backupDownload: "ব্যাকআপ ডাউনলোড",
-    restoreBackup: "ব্যাকআপ রিস্টোর",
-    activityLog: "অ্যাক্টিভিটি লগ",
-    help: "সাহায্য",
+    help: "সিকিউরিটি তথ্য",
     logout: "লগআউট",
-    autoLoggedOut: "দীর্ঘক্ষণ নিষ্ক্রিয় থাকার কারণে লগআউট করা হয়েছে। আবার সাইন ইন করুন।"
+    autoLoggedOut: "দীর্ঘক্ষণ নিষ্ক্রিয় থাকার কারণে লগআউট করা হয়েছে।"
   }
 };
 
@@ -149,21 +141,21 @@ export function mapAuthErrorToMessage(err, lang = "en") {
   const isBn = lang === "bn";
   switch (code) {
     case "auth/invalid-email":
-      return isBn ? "সঠিক ইমেইল ঠিকানা দিন।" : "Please enter a valid email address.";
+      return isBn ? "সঠিক ইমেইল বা ইউজারনেম দিন।" : "Please enter a valid email or username.";
     case "auth/user-disabled":
-      return isBn ? "এই অ্যাডমিন অ্যাকাউন্টটি নিষ্ক্রিয় করা হয়েছে।" : "This admin account has been disabled.";
+      return isBn ? "এই অ্যাডমিন অ্যাকাউন্টটি নিষ্ক্রিয় করা হয়েছে।" : "This admin account has been disabled.";
     case "auth/user-not-found":
     case "auth/wrong-password":
     case "auth/invalid-credential":
-      return isBn ? "ইমেইল অথবা পাসওয়ার্ড সঠিক নয়।" : "Invalid email or password.";
+      return isBn ? "ইউজারনেম/ইমেইল অথবা পাসওয়ার্ড সঠিক নয়।" : "Invalid username/email or password.";
     case "auth/too-many-requests":
-      return isBn ? "অতিরিক্ত চেষ্টার কারণে সাময়িকভাবে ব্লক করা হয়েছে। পরে চেষ্টা করুন।" : "Too many failed attempts. Please try again later.";
+      return isBn ? "অতিরিক্ত চেষ্টার কারণে সার্ভার থেকে সাময়িকভাবে ব্লক করা হয়েছে।" : "Too many failed attempts. Temporarily rate-limited by Firebase Auth.";
     case "auth/network-request-failed":
-      return isBn ? "নেটওয়ার্ক সংযোগে সমস্যা হয়েছে। ইন্টারনেট যাচাই করুন।" : "Network error. Please check your internet connection.";
+      return isBn ? "নেটওয়ার্ক সংযোগে সমস্যা হয়েছে। ইন্টারনেট যাচাই করুন।" : "Network error. Please check your internet connection.";
     default:
       return isBn
-        ? `সাইন ইন ব্যর্থ হয়েছে: ${err?.message || "অজানা ত্রুটি"}`
-        : `Sign-in failed: ${err?.message || "Unknown error"}`;
+        ? `সাইন ইন ব্যর্থ হয়েছে: ${err?.message || "অজানা ত্রুটি"}`
+        : `Authentication failed: ${err?.message || "Unknown error"}`;
   }
 }
 

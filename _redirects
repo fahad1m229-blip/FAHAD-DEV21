@@ -1,0 +1,4 @@
+# Render Static Site & Netlify SPA Rewrite Rules for Hidden Admin Route
+/FAHAD/admin      /FAHAD/admin/index.html  200
+/FAHAD/admin/     /FAHAD/admin/index.html  200
+/FAHAD/admin/*    /FAHAD/admin/index.html  200
