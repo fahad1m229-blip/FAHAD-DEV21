@@ -32,14 +32,16 @@ export class AdminContentModule {
 
   subscribeCategories() {
     const db = this.authService.db;
-    const { collection, query, orderBy, onSnapshot } = this.authService.fsMod;
+    const { collection, onSnapshot } = this.authService.fsMod;
     if (!db) return;
 
     this.unsubs.push(
       onSnapshot(
-        query(collection(db, "categories"), orderBy("order", "asc")),
+        collection(db, "categories"),
         (snap) => {
-          this.categories = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          this.categories = snap.docs
+            .map((d) => ({ id: d.id, ...d.data() }))
+            .sort((a, b) => Number(a.order ?? 999) - Number(b.order ?? 999));
           if (!this.selectedCategoryId && this.categories.length) {
             this.selectCategory(this.categories[0].id);
           } else {
@@ -59,7 +61,7 @@ export class AdminContentModule {
       try { this._versionUnsub(); } catch {}
     }
     const db = this.authService.db;
-    const { collection, query, orderBy, onSnapshot } = this.authService.fsMod;
+    const { collection, onSnapshot } = this.authService.fsMod;
     if (!db || !catId) {
       this.versions = [];
       this.render();
@@ -67,9 +69,11 @@ export class AdminContentModule {
     }
 
     this._versionUnsub = onSnapshot(
-      query(collection(db, "categories", catId, "versions"), orderBy("order", "asc")),
+      collection(db, "categories", catId, "versions"),
       (snap) => {
-        this.versions = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        this.versions = snap.docs
+          .map((d) => ({ id: d.id, ...d.data() }))
+          .sort((a, b) => Number(a.order ?? 999) - Number(b.order ?? 999));
         this.render();
       },
       () => {

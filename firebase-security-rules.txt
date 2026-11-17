@@ -3,7 +3,7 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // =========================================================================
-    // FAHAD DEV — Hardened Zero-Trust Firestore Security Rules
+    // FAHAD DEV — Hardened Zero-Trust Firestore Security Rules (nex-ora-top)
     // =========================================================================
 
     function isSignedIn() {
@@ -14,18 +14,28 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
 
+    function isAdminActive() {
+      return !('active' in adminDoc().data) || adminDoc().data.active == true;
+    }
+
     function isAdmin() {
       return isSignedIn() &&
         exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
-        adminDoc().data.role in ['owner', 'editor', 'viewer'];
+        isAdminActive() &&
+        (!('role' in adminDoc().data) ||
+          adminDoc().data.role in ['owner', 'admin', 'superadmin', 'super_admin', 'editor', 'viewer']);
     }
 
     function isOwner() {
-      return isAdmin() && adminDoc().data.role == 'owner';
+      return isAdmin() &&
+        ('role' in adminDoc().data) &&
+        adminDoc().data.role in ['owner', 'admin', 'superadmin', 'super_admin'];
     }
 
     function isEditorOrOwner() {
-      return isAdmin() && adminDoc().data.role in ['owner', 'editor'];
+      return isAdmin() &&
+        ('role' in adminDoc().data) &&
+        adminDoc().data.role in ['owner', 'admin', 'superadmin', 'super_admin', 'editor'];
     }
 
     function isValidString(val, maxLen) {
@@ -55,7 +65,9 @@ service cloud.firestore {
     // Navigation Menu & Social Links
     // -------------------------------------------------------------------------
     match /menu/{menuId} {
-      allow read: if (!('visible' in resource.data) || resource.data.visible == true) || isAdmin();
+      allow read: if ((!('visible' in resource.data) || resource.data.visible == true)
+                  && (!('enabled' in resource.data) || resource.data.enabled == true))
+                  || isAdmin();
       allow write: if isEditorOrOwner();
     }
 
@@ -68,20 +80,20 @@ service cloud.firestore {
     // Categories & Nested Versions / Links
     // -------------------------------------------------------------------------
     match /categories/{categoryId} {
-      allow read: if (!('visible' in resource.data) || resource.data.visible == true)
-                  || (!('published' in resource.data) || resource.data.published == true)
+      allow read: if ((!('visible' in resource.data) || resource.data.visible == true)
+                  && (!('published' in resource.data) || resource.data.published == true))
                   || isAdmin();
       allow write: if isEditorOrOwner();
 
       match /versions/{versionId} {
-        allow read: if (!('visible' in resource.data) || resource.data.visible == true)
-                    || (!('published' in resource.data) || resource.data.published == true)
+        allow read: if ((!('visible' in resource.data) || resource.data.visible == true)
+                    && (!('published' in resource.data) || resource.data.published == true))
                     || isAdmin();
         allow write: if isEditorOrOwner();
 
         match /links/{linkId} {
-          allow read: if (!('active' in resource.data) || resource.data.active == true)
-                      || (!('enabled' in resource.data) || resource.data.enabled == true)
+          allow read: if ((!('active' in resource.data) || resource.data.active == true)
+                      && (!('enabled' in resource.data) || resource.data.enabled == true))
                       || isAdmin();
           allow write: if isEditorOrOwner();
         }
@@ -106,13 +118,13 @@ service cloud.firestore {
     match /admins/{uid} {
       allow read: if (isSignedIn() && request.auth.uid == uid) || isAdmin();
       allow create: if isOwner() &&
-        request.resource.data.keys().hasOnly(['role', 'name', 'username', 'email', 'avatar', 'active', 'updatedAt']) &&
+        request.resource.data.keys().hasOnly(['uid', 'role', 'name', 'username', 'email', 'avatar', 'active', 'updatedAt']) &&
         request.resource.data.role in ['owner', 'editor', 'viewer'] &&
         isValidString(request.resource.data.name, 80) &&
         isValidString(request.resource.data.email, 160);
       allow update: if (isOwner() || (isSignedIn() && request.auth.uid == uid &&
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'avatar', 'updatedAt']))) &&
-        request.resource.data.role in ['owner', 'editor', 'viewer'];
+        (!('role' in request.resource.data) || request.resource.data.role in ['owner', 'admin', 'superadmin', 'super_admin', 'editor', 'viewer']);
       // Never allow an owner to delete their own admin access
       allow delete: if isOwner() && request.auth.uid != uid;
     }

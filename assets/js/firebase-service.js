@@ -13,7 +13,7 @@
  * the service gracefully exposes the seed schema without inventing fake URLs.
  */
 
-import { FIRESTORE_DATABASE_ID, getFirebaseConfig, isFirebaseConfigured } from "./firebase-config.js";
+import { initFirebaseServices, isFirebaseConfigured } from "./firebase-config.js";
 
 // Sample Seed Data (used only before Firestore is populated/configured)
 export const SEED_DATA = {
@@ -240,19 +240,20 @@ export class FirebaseService {
     }
 
     try {
-      const [appMod, fsMod, authMod] = await Promise.all([
-        import("https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js"),
-        import("https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js"),
-        import("https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js")
-      ]);
+      const services = await initFirebaseServices();
+      if (!services.configured) {
+        this.isLive = false;
+        this.emitSeedState(handlers);
+        return { live: false };
+      }
+      if (services.sdkError) {
+        throw services.sdkError;
+      }
 
-      this.firestoreMod = fsMod;
-      const cfg = getFirebaseConfig();
-      this.app = appMod.getApps().length ? appMod.getApp() : appMod.initializeApp(cfg);
-      this.db = FIRESTORE_DATABASE_ID && FIRESTORE_DATABASE_ID !== "(default)"
-        ? fsMod.getFirestore(this.app, FIRESTORE_DATABASE_ID)
-        : fsMod.getFirestore(this.app);
-      this.auth = authMod.getAuth(this.app);
+      this.firestoreMod = services.fsMod;
+      this.app = services.app;
+      this.db = services.db;
+      this.auth = services.auth;
       this.isLive = true;
 
       this.attachCoreListeners(handlers);

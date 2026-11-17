@@ -82,9 +82,11 @@ export class AdminDashboardModule {
     // 2. Categories + nested versions & links count
     this.unsubs.push(
       onSnapshot(
-        query(collection(db, "categories"), orderBy("order", "asc")),
+        collection(db, "categories"),
         async (snap) => {
-          const cats = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          const cats = snap.docs
+            .map((d) => ({ id: d.id, ...d.data() }))
+            .sort((a, b) => Number(a.order ?? 999) - Number(b.order ?? 999));
           let versionsCount = 0;
           let linksCount = 0;
 

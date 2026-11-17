@@ -8,14 +8,13 @@ import {
   FIRESTORE_DATABASE_ID,
   getFirebaseConfig,
   getMissingFirebaseFields,
-  isFirebaseConfigured
+  initFirebaseServices
 } from "./firebase-config.js";
 import { ADMIN_I18N, mapAuthErrorToMessage } from "./admin-ui.js";
 
 const LOCKOUT_KEY = "fahad_admin_login_attempts_v2";
 const MAX_ATTEMPTS = 5;
 const BASE_LOCKOUT_MS = 60_000;
-const SDK_LOAD_TIMEOUT_MS = 15_000;
 const PERSISTENCE_TIMEOUT_MS = 4_000;
 const AUTH_REQUEST_TIMEOUT_MS = 15_000;
 const DB_VERIFY_TIMEOUT_MS = 10_000;
@@ -69,51 +68,41 @@ export class AdminAuthService {
     this._initPromise = (async () => {
       const cfg = getFirebaseConfig();
       const missingFields = getMissingFirebaseFields();
-      const configured = missingFields.length === 0;
       console.info("[AdminAuth] Diagnostic init check:", {
-        configured,
+        configured: missingFields.length === 0,
         missingFields,
-        hasProjectId: Boolean(cfg?.projectId && !String(cfg.projectId).startsWith("YOUR_")),
+        projectId: cfg?.projectId || "(unset)",
         databaseId: FIRESTORE_DATABASE_ID || "(default)"
       });
 
-      if (!configured) {
-        console.warn("[AdminAuth] Firebase Web configuration is incomplete or placeholder:", missingFields);
-        return { configured: false, missingFields };
+      const start = performance.now();
+      const services = await initFirebaseServices();
+
+      if (!services.configured) {
+        console.warn("[AdminAuth] Firebase Web configuration is incomplete or placeholder:", services.missingFields);
+        this._initPromise = null;
+        return { configured: false, missingFields: services.missingFields };
       }
 
-      try {
-        const start = performance.now();
-        const [appMod, authMod, fsMod] = await withTimeout(
-          Promise.all([
-            import("https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js"),
-            import("https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js"),
-            import("https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js")
-          ]),
-          SDK_LOAD_TIMEOUT_MS,
-          "SDK_LOAD_TIMEOUT"
-        );
-
-        this.authMod = authMod;
-        this.fsMod = fsMod;
-        this.app = appMod.getApps().length ? appMod.getApp() : appMod.initializeApp(cfg);
-        this.auth = authMod.getAuth(this.app);
-        this.db = FIRESTORE_DATABASE_ID && FIRESTORE_DATABASE_ID !== "(default)"
-          ? fsMod.getFirestore(this.app, FIRESTORE_DATABASE_ID)
-          : fsMod.getFirestore(this.app);
-
-        console.info("[AdminAuth] Firebase Auth & Firestore SDK ready.", {
-          elapsedMs: Math.round(performance.now() - start)
-        });
-        return { configured: true, missingFields: [] };
-      } catch (err) {
+      if (services.sdkError) {
         console.error("[AdminAuth] Failed to initialize Firebase SDK:", {
-          code: err?.code || "INIT_ERROR",
-          message: err?.message || String(err)
+          code: services.sdkError?.code || "INIT_ERROR",
+          message: services.sdkError?.message || String(services.sdkError)
         });
         this._initPromise = null;
-        return { configured: true, sdkError: err };
+        return { configured: true, sdkError: services.sdkError };
       }
+
+      this.app = services.app;
+      this.auth = services.auth;
+      this.db = services.db;
+      this.authMod = services.authMod;
+      this.fsMod = services.fsMod;
+
+      console.info("[AdminAuth] Firebase Auth & Firestore SDK ready.", {
+        elapsedMs: Math.round(performance.now() - start)
+      });
+      return { configured: true, missingFields: [] };
     })();
 
     return this._initPromise;
@@ -241,9 +230,15 @@ export class AdminAuthService {
         }
 
         const data = snap.data();
-        const role = String(data.role || "viewer").toLowerCase();
-        if (!["owner", "editor", "viewer"].includes(role)) {
-          console.warn("[AdminDB] Invalid admin role in admins/{uid}.", { uid, role });
+        const rawRole = String(data.role || "viewer").trim().toLowerCase();
+        const normalizedRole = ["owner", "admin", "superadmin", "super_admin"].includes(rawRole)
+          ? "owner"
+          : ["editor", "viewer"].includes(rawRole)
+          ? rawRole
+          : null;
+
+        if (!normalizedRole) {
+          console.warn("[AdminDB] Invalid admin role in admins/{uid}.", { uid, role: rawRole });
           return { ok: false, reason: "not_admin" };
         }
 
@@ -254,10 +249,10 @@ export class AdminAuthService {
 
         const profile = {
           uid,
-          role,
+          role: normalizedRole,
           name: data.name || data.username || "Admin",
           username: data.username || "",
-          email: data.email || "",
+          email: data.email || this.auth?.currentUser?.email || "",
           avatar: data.avatar || "",
           active: true
         };
