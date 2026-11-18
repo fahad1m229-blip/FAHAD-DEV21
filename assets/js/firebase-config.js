@@ -1,19 +1,18 @@
 /**
  * FAHAD DEV — Firebase Web Configuration & Singleton Service Initializer
  * ---------------------------------------------------------------------------
- * Project: nex-ora-top
+ * Project: fahad-e7fe9
  * Initializes Firebase App, Firebase Authentication, and Cloud Firestore
  * as a single memoized instance so Firebase is never initialized multiple times.
  */
 
 export const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyC1lakPZTiYKvkrtoWbGzHQ2_bknLUBWLg",
-  authDomain: "nex-ora-top.firebaseapp.com",
-  databaseURL: "https://nex-ora-top-default-rtdb.firebaseio.com",
-  projectId: "nex-ora-top",
-  storageBucket: "nex-ora-top.firebasestorage.app",
-  messagingSenderId: "241377330781",
-  appId: "1:241377330781:web:0dcc750aa63aa69121efb4"
+  apiKey: "AIzaSyCXI0Jf-hKPglRmLC141nosrj2BbsRDt98",
+  authDomain: "fahad-e7fe9.firebaseapp.com",
+  projectId: "fahad-e7fe9",
+  storageBucket: "fahad-e7fe9.firebasestorage.app",
+  messagingSenderId: "1029045028750",
+  appId: "1:1029045028750:web:613444b1d5571b6168c6df"
 };
 
 export const firebaseConfig = FIREBASE_CONFIG;
@@ -43,7 +42,6 @@ function isPlaceholderValue(val) {
   return (
     !s ||
     s.startsWith("YOUR_") ||
-    s.includes("YOUR_PROJECT_ID") ||
     s.startsWith("<") ||
     s.startsWith("REPLACE_")
   );
@@ -65,7 +63,7 @@ function withSdkTimeout(promise, ms) {
 
 /**
  * Returns the active Firebase Web App configuration, allowing an optional
- * runtime window.__FIREBASE_CONFIG__ override without conflicting with defaults.
+ * runtime window.__FIREBASE_CONFIG__ override if explicitly injected.
  */
 export function getFirebaseConfig() {
   const injected =
@@ -146,4 +144,19 @@ export async function initFirebaseServices() {
   })();
 
   return _servicesPromise;
+}
+
+export async function getFirebaseApp() {
+  const services = await initFirebaseServices();
+  return services.app || null;
+}
+
+export async function getFirebaseAuth() {
+  const services = await initFirebaseServices();
+  return services.auth || null;
+}
+
+export async function getFirestoreDb() {
+  const services = await initFirebaseServices();
+  return services.db || null;
 }

@@ -2,7 +2,7 @@
  * Caches static shell assets for instant loading and provides offline.html fallback.
  * Skips Firestore/Google APIs so real-time listeners never serve stale auth/API responses.
  */
-const CACHE_VERSION = 'fahad-dev-v1.0.1';
+const CACHE_VERSION = 'fahad-dev-v1.0.2';
 const STATIC_ASSETS = [
   './',
   './index.html',
