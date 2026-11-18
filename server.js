@@ -196,7 +196,15 @@ export function createAppServer({ auth = new SingleAdminAuth(), store = new Site
       // -----------------------------------------------------------------------
       if (pathname === "/api/health" && method === "GET") {
         const cfg = await auth.isConfigured();
-        sendJson(res, 200, { ok: true, authConfigured: cfg.configured });
+        const diag = cfg.diagnostics;
+        sendJson(res, 200, {
+          ok: true,
+          nodeEnv: diag.nodeEnv,
+          authConfigured: cfg.configured,
+          emailValid: diag.email.validFormat,
+          hashFormatValid: diag.passwordHash.validFormat,
+          sessionSecretValid: diag.sessionSecret.validFormat
+        });
         return;
       }
 
@@ -562,8 +570,9 @@ if (isMain) {
   const store = new SiteDataStore();
   await store.init();
   const cfgStatus = await auth.isConfigured();
+  console.info("[FAHAD DEV] Auth env check:", cfgStatus.diagnostics);
   if (!cfgStatus.configured) {
-    console.warn("[FAHAD DEV] Warning: Missing server admin env vars:", cfgStatus.missing.join(", "));
+    console.warn("[FAHAD DEV] Warning: Missing or invalid server admin env vars:", cfgStatus.missing.join(", "));
   }
   const port = Number(process.env.PORT || 3000);
   const server = createAppServer({ auth, store });

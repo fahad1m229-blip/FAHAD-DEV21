@@ -240,4 +240,66 @@ describe("FAHAD DEV Single-Admin Authentication & Security Suite", () => {
     assert.equal(lockoutRes.status, 429);
     assert.ok(Number(lockoutRes.headers.get("retry-after")) > 0);
   });
+
+  it("verifies CLI hash-password output against original password & handles Termux/Render copy-paste artifacts", async () => {
+    const { execFile } = await import("node:child_process");
+    const { promisify } = await import("node:util");
+    const execFileAsync = promisify(execFile);
+
+    const samplePass = "Termux$Admin#2026!";
+    const { stdout } = await execFileAsync(process.execPath, ["scripts/hash-password.js", samplePass]);
+
+    const hashMatch = stdout.match(/^ADMIN_PASSWORD_HASH=(.+)$/m);
+    const secretMatch = stdout.match(/^SESSION_SECRET=(.+)$/m);
+    assert.ok(hashMatch, "Expected ADMIN_PASSWORD_HASH output line");
+    assert.ok(secretMatch, "Expected SESSION_SECRET output line");
+
+    const generatedHash = hashMatch[1].trim();
+    const generatedSecret = secretMatch[1].trim();
+
+    assert.equal(await verifyPassword(samplePass, generatedHash), true);
+
+    // Simulate Termux wrapped newlines + quotes + accidental KEY= prefix pasted into Render
+    const wrappedTermuxHash = `"ADMIN_PASSWORD_HASH=${generatedHash.slice(0, 40)}\n ${generatedHash.slice(40)}"`;
+    const quotedEmail = ' "BgFahad0@gmail.com" ';
+    const wrappedSecret = `'SESSION_SECRET=${generatedSecret.slice(0, 32)}\n${generatedSecret.slice(32)}'`;
+
+    const termuxAuth = new SingleAdminAuth({
+      dataDir: tmpDir,
+      env: {
+        NODE_ENV: "production",
+        ADMIN_EMAIL: quotedEmail,
+        ADMIN_PASSWORD_HASH: wrappedTermuxHash,
+        SESSION_SECRET: wrappedSecret
+      }
+    });
+
+    const cfg = await termuxAuth.isConfigured();
+    assert.equal(cfg.configured, true);
+    assert.equal(cfg.diagnostics.passwordHash.validFormat, true);
+    assert.equal(cfg.diagnostics.passwordHash.saltBytes, 16);
+    assert.equal(cfg.diagnostics.passwordHash.hashBytes, 64);
+
+    // Ensure diagnostics never leak raw credentials
+    const diagText = JSON.stringify(cfg.diagnostics);
+    assert.equal(diagText.includes(samplePass), false);
+    assert.equal(diagText.includes(generatedHash), false);
+    assert.equal(diagText.includes(generatedSecret), false);
+
+    // Authorized Gmail authenticates cleanly; unauthorized emails are rejected
+    const okLogin = await termuxAuth.authenticate({
+      email: "bgfahad0@gmail.com",
+      password: samplePass,
+      ip: "203.0.113.99"
+    });
+    assert.equal(okLogin.ok, true);
+
+    const badEmailLogin = await termuxAuth.authenticate({
+      email: "someone.else@gmail.com",
+      password: samplePass,
+      ip: "203.0.113.100"
+    });
+    assert.equal(badEmailLogin.ok, false);
+    assert.equal(badEmailLogin.status, 401);
+  });
 });

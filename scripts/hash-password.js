@@ -1,42 +1,74 @@
 /**
- * FAHAD DEV — Secure Admin Password Hash & Session Secret Generator
+ * FAHAD DEV — Termux-Safe Admin Password Hash & Session Secret Generator
  * Usage:
  *   npm run hash-password
  *   node scripts/hash-password.js "YourStrongPassword"
+ *   node scripts/hash-password.js --verify "YourStrongPassword" "scrypt$..."
  */
 
 import crypto from "node:crypto";
 import readline from "node:readline";
-import { hashPassword } from "../lib/auth.js";
+import { Writable } from "node:stream";
+import { hashPassword, normalizeStoredHash, verifyPassword } from "../lib/auth.js";
 
 function promptHidden(promptText) {
   return new Promise((resolve) => {
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    const onData = (char) => {
-      const s = String(char);
-      if (s === "\n" || s === "\r" || s === "\u0004") {
-        process.stdin.off("data", onData);
-      } else {
-        process.stdout.clearLine(0);
-        process.stdout.cursorTo(0);
-        process.stdout.write(promptText + "*".repeat(rl.line.length));
+    let muted = false;
+    const mutableStdout = new Writable({
+      write(chunk, encoding, callback) {
+        if (!muted) {
+          process.stdout.write(chunk, encoding);
+        }
+        callback();
       }
-    };
-    if (process.stdin.isTTY) {
-      process.stdin.on("data", onData);
+    });
+
+    const isTty = Boolean(process.stdin.isTTY);
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: mutableStdout,
+      terminal: isTty
+    });
+
+    process.stdout.write(promptText);
+    if (isTty) {
+      muted = true;
     }
-    rl.question(promptText, (answer) => {
+
+    rl.question("", (answer) => {
+      muted = false;
       rl.close();
-      if (process.stdin.isTTY) process.stdout.write("\n");
+      if (isTty) process.stdout.write("\n");
       resolve(answer);
     });
   });
 }
 
+async function runVerifyMode(pwdArg, hashArg) {
+  const password = pwdArg || (await promptHidden("Enter Admin Password to verify: "));
+  const rawHash = hashArg || (await promptHidden("Paste ADMIN_PASSWORD_HASH (scrypt$...): "));
+  const normalized = normalizeStoredHash(rawHash);
+  const ok = await verifyPassword(password, normalized);
+  console.log(ok ? "VERIFY_OK: Password matches the provided scrypt hash." : "VERIFY_FAILED: Password does NOT match the provided hash.");
+  process.exit(ok ? 0 : 1);
+}
+
 async function main() {
+  if (process.argv[2] === "--verify") {
+    await runVerifyMode(process.argv[3], process.argv[4]);
+    return;
+  }
+
   let password = process.argv[2];
   if (!password) {
-    password = await promptHidden("Enter Admin Password (min 10 chars recommended): ");
+    password = await promptHidden("Enter Admin Password (min 8 chars, 10+ recommended): ");
+    if (process.stdin.isTTY) {
+      const confirm = await promptHidden("Confirm Admin Password: ");
+      if (password !== confirm) {
+        console.error("Error: Passwords did not match. Please try again.");
+        process.exit(1);
+      }
+    }
   }
 
   if (!password || password.length < 8) {
@@ -45,12 +77,21 @@ async function main() {
   }
 
   const passwordHash = await hashPassword(password);
+  const selfCheck = await verifyPassword(password, passwordHash);
+  if (!selfCheck) {
+    console.error("Error: Internal hash self-verification failed.");
+    process.exit(1);
+  }
+
   const sessionSecret = crypto.randomBytes(48).toString("hex");
 
-  console.log("\n=== Configure these in Render Environment Variables ===");
+  console.log("\n=== Render Environment Variables (Paste VALUES only, no quotes) ===");
   console.log(`ADMIN_PASSWORD_HASH=${passwordHash}`);
   console.log(`SESSION_SECRET=${sessionSecret}`);
-  console.log("=======================================================\n");
+  console.log("Self-verification: PASSED (scrypt, 16-byte salt, 64-byte key)");
+  console.log("Note: In Render dashboard, put ONLY 'scrypt$...' in the Value box");
+  console.log("      (without quotes or extra spaces/newlines from line wrapping).");
+  console.log("====================================================================\n");
 }
 
 main();

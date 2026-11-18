@@ -2,7 +2,7 @@
  * Caches static shell assets for instant loading and provides offline.html fallback.
  * Skips /api/ and hidden/admin routes so authenticated requests are never cached.
  */
-const CACHE_VERSION = 'fahad-dev-v2.0.0';
+const CACHE_VERSION = 'fahad-dev-v2.1.0';
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -48,12 +48,14 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url);
 
-  // Never intercept cross-origin requests, APIs, or hidden/admin routes
+  // Never intercept cross-origin requests, APIs, or hidden/admin routes & assets
   if (
     url.origin !== self.location.origin ||
     url.pathname.startsWith('/api/') ||
     url.pathname.includes('/FAHAD/admin') ||
-    url.pathname.startsWith('/admin')
+    url.pathname.startsWith('/admin') ||
+    url.pathname.startsWith('/assets/js/admin') ||
+    url.pathname.startsWith('/assets/css/admin')
   ) {
     return;
   }
