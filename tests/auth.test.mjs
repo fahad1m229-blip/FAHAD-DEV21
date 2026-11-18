@@ -58,11 +58,16 @@ describe("FAHAD DEV Single-Admin Authentication & Security Suite", () => {
     }
   });
 
-  it("hashes and verifies passwords with scrypt securely", async () => {
+  it("hashes and verifies passwords with scrypt securely without trimming", async () => {
     const hash = await hashPassword("MyTestSecret99!");
     assert.ok(hash.startsWith("scrypt$"));
     assert.equal(await verifyPassword("MyTestSecret99!", hash), true);
     assert.equal(await verifyPassword("WrongPassword", hash), false);
+
+    const spacedPass = "  My Spaced Pass 2026!  ";
+    const spacedHash = await hashPassword(spacedPass);
+    assert.equal(await verifyPassword(spacedPass, spacedHash), true);
+    assert.equal(await verifyPassword(spacedPass.trim(), spacedHash), false);
   });
 
   it("keeps public User Panel and public APIs accessible without authentication", async () => {
