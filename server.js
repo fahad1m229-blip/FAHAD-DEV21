@@ -203,6 +203,8 @@ export function createAppServer({ auth = new SingleAdminAuth(), store = new Site
           authConfigured: cfg.configured,
           emailValid: diag.email.validFormat,
           hashFormatValid: diag.passwordHash.validFormat,
+          hashSource: diag.passwordHash.source,
+          hashFingerprint: diag.passwordHash.fingerprint,
           sessionSecretValid: diag.sessionSecret.validFormat
         });
         return;

@@ -36,8 +36,12 @@ export class AdminAuthService {
   async checkSession() {
     try {
       const res = await this._fetchWithTimeout("/api/admin/auth/session", { method: "GET" });
+      const contentType = String(res.headers.get("content-type") || "").toLowerCase();
+      if (res.status === 404 || res.status === 405 || !contentType.includes("application/json")) {
+        return { configured: true, authenticated: false, backendUnreachable: true, status: res.status };
+      }
       if (!res.ok) {
-        return { configured: true, authenticated: false };
+        return { configured: true, authenticated: false, status: res.status };
       }
       const data = await res.json();
       return {
@@ -71,7 +75,30 @@ export class AdminAuthService {
         })
       });
 
-      const data = await res.json().catch(() => ({}));
+      const contentType = String(res.headers.get("content-type") || "").toLowerCase();
+      if (res.status === 404 || res.status === 405 || !contentType.includes("application/json")) {
+        return {
+          ok: false,
+          status: res.status,
+          code: "BACKEND_UNREACHABLE",
+          message:
+            ADMIN_I18N[lang]?.backendUnreachable ||
+            ADMIN_I18N.en.backendUnreachable
+        };
+      }
+
+      const data = await res.json().catch(() => null);
+      if (!data || typeof data !== "object") {
+        return {
+          ok: false,
+          status: res.status,
+          code: "BACKEND_UNREACHABLE",
+          message:
+            ADMIN_I18N[lang]?.backendUnreachable ||
+            ADMIN_I18N.en.backendUnreachable
+        };
+      }
+
       if (res.ok && data.ok) {
         return {
           ok: true,

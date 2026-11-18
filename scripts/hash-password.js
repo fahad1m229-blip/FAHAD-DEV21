@@ -83,12 +83,18 @@ async function main() {
     process.exit(1);
   }
 
+  const hashFingerprint = crypto.createHash("sha256").update(passwordHash).digest("hex").slice(0, 8);
   const sessionSecret = crypto.randomBytes(48).toString("hex");
+  const hasEdgeSpaces = password !== password.trim();
 
   console.log("\n=== Render Environment Variables (Paste VALUES only, no quotes) ===");
   console.log(`ADMIN_PASSWORD_HASH=${passwordHash}`);
   console.log(`SESSION_SECRET=${sessionSecret}`);
-  console.log("Self-verification: PASSED (scrypt, 16-byte salt, 64-byte key)");
+  console.log(`Self-verification: PASSED (${password.length} chars, scrypt 16B salt / 64B key)`);
+  console.log(`Hash Fingerprint (check /api/health after deploy): ${hashFingerprint}`);
+  if (hasEdgeSpaces) {
+    console.warn("WARNING: Leading or trailing space detected in password input (check Termux keyboard).");
+  }
   console.log("Note: In Render dashboard, put ONLY 'scrypt$...' in the Value box");
   console.log("      (without quotes or extra spaces/newlines from line wrapping).");
   console.log("====================================================================\n");

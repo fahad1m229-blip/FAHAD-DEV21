@@ -500,6 +500,10 @@ async function bootstrap() {
   requestedSubRoute = getRequestedSubRoute();
 
   const session = await authService.checkSession();
+  if (session.backendUnreachable) {
+    enforceLoggedOutState(t("backendUnreachable"), false);
+    return;
+  }
   if (!session.configured) {
     const missingNote = session.missing?.length ? ` (${session.missing.join(", ")})` : "";
     enforceLoggedOutState(`${t("serverNotConfigured")}${missingNote}`, true);

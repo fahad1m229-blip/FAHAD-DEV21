@@ -306,5 +306,44 @@ describe("FAHAD DEV Single-Admin Authentication & Security Suite", () => {
     });
     assert.equal(badEmailLogin.ok, false);
     assert.equal(badEmailLogin.status, 401);
+
+    // Check /api/health exposes non-secret 8-char hashFingerprint matching CLI output
+    const fpMatch = stdout.match(/^Hash Fingerprint.*:\s*([0-9a-f]{8})$/m);
+    assert.ok(fpMatch, "Expected 8-char hash fingerprint in CLI output");
+    const healthRes = await fetch(`${baseUrl}/api/health`);
+    assert.equal(healthRes.status, 200);
+    const health = await healthRes.json();
+    assert.equal(health.authConfigured, true);
+    assert.match(health.hashFingerprint, /^[0-9a-f]{8}$/);
+
+    // Verify stale admin-credentials.json without matching envHashFingerprint never shadows new env hash
+    const staleDir = await fs.mkdtemp(path.join(os.tmpdir(), "fahad-stale-override-"));
+    try {
+      const legacyHash = await hashPassword("OldLegacyPassword!2025");
+      await fs.writeFile(
+        path.join(staleDir, "admin-credentials.json"),
+        JSON.stringify({ passwordHash: legacyHash, tokenVersion: 1 })
+      );
+      const freshAuth = new SingleAdminAuth({
+        dataDir: staleDir,
+        env: {
+          NODE_ENV: "production",
+          ADMIN_EMAIL: "bgfahad0@gmail.com",
+          ADMIN_PASSWORD_HASH: generatedHash,
+          SESSION_SECRET: generatedSecret
+        }
+      });
+      const freshDiag = await freshAuth.getDiagnostics();
+      assert.equal(freshDiag.passwordHash.source, "env");
+      assert.equal(freshDiag.passwordHash.fingerprint, fpMatch[1]);
+      const loginWithNewEnv = await freshAuth.authenticate({
+        email: "bgfahad0@gmail.com",
+        password: samplePass,
+        ip: "203.0.113.101"
+      });
+      assert.equal(loginWithNewEnv.ok, true);
+    } finally {
+      await fs.rm(staleDir, { recursive: true, force: true });
+    }
   });
 });
