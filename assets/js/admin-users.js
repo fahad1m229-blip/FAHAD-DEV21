@@ -1,18 +1,17 @@
 /**
- * FAHAD DEV Admin — User Management (users & admins) & Admin Profile Module
+ * FAHAD DEV Admin — User Management & Single-Admin Profile Module
  */
 
-import { escapeHtml, openConfirmModal, safeUrlOrEmpty, showAdminToast } from "./admin-ui.js";
+import { escapeHtml, safeUrlOrEmpty, showAdminToast } from "./admin-ui.js";
 
 export class AdminUsersModule {
-  constructor(authService, getAdminProfile, getLang, onLogout) {
+  constructor(authService, getAdminProfile, getLang, onLogout, onNavigate) {
     this.authService = authService;
     this.getAdminProfile = getAdminProfile;
     this.getLang = getLang;
     this.onLogout = onLogout;
-    this.unsubs = [];
+    this.onNavigate = onNavigate;
     this.users = [];
-    this.admins = [];
     this.search = "";
     this.filter = "all";
     this.mode = "users"; // "users" | "profile"
@@ -22,157 +21,46 @@ export class AdminUsersModule {
     this.container = container;
     this.mode = mode;
     this.render();
-    this.subscribe();
+    this.loadData();
   }
 
-  unmount() {
-    while (this.unsubs.length) {
-      const u = this.unsubs.pop();
-      try { u(); } catch {}
+  unmount() {}
+
+  async loadData() {
+    try {
+      const [usersRes, profRes] = await Promise.all([
+        this.authService.apiFetch("/api/admin/users"),
+        this.authService.apiFetch("/api/admin/profile")
+      ]);
+      this.users = Array.isArray(usersRes.users) ? usersRes.users : [];
+      const activeProfile = this.getAdminProfile();
+      if (activeProfile && profRes.profile) {
+        activeProfile.name = profRes.profile.name;
+        activeProfile.avatar = profRes.profile.avatar;
+      }
+      this.render();
+    } catch (err) {
+      if (err?.status !== 401) {
+        console.warn("[Users] Failed to load admin users/profile:", err?.message || err);
+      }
     }
-  }
-
-  subscribe() {
-    const db = this.authService.db;
-    const { collection, onSnapshot } = this.authService.fsMod;
-    if (!db) return;
-
-    this.unsubs.push(
-      onSnapshot(
-        collection(db, "users"),
-        (snap) => {
-          this.users = snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
-          this.render();
-        },
-        () => {
-          this.users = [];
-          this.render();
-        }
-      )
-    );
-
-    this.unsubs.push(
-      onSnapshot(
-        collection(db, "admins"),
-        (snap) => {
-          this.admins = snap.docs.map((d) => ({ uid: d.id, ...d.data() }));
-          this.render();
-        },
-        () => {
-          this.admins = [];
-          this.render();
-        }
-      )
-    );
   }
 
   async toggleUserStatus(uid, currentActive) {
     const isBn = this.getLang() === "bn";
-    const profile = this.getAdminProfile();
-    if (profile?.role === "viewer") {
-      showAdminToast(isBn ? "Viewer রোল পরিবর্তন করতে পারবে না।" : "Viewer role is read-only.", "error");
-      return;
-    }
-
     try {
-      const db = this.authService.db;
-      const { doc, updateDoc, addDoc, collection, serverTimestamp } = this.authService.fsMod;
       const nextActive = !currentActive;
-      await updateDoc(doc(db, "users", uid), {
-        active: nextActive,
-        status: nextActive ? "active" : "blocked",
-        updatedAt: serverTimestamp()
+      await this.authService.apiFetch(`/api/admin/users/${encodeURIComponent(uid)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active: nextActive })
       });
-      await addDoc(collection(db, "logs"), {
-        admin: profile.name || profile.email,
-        adminUid: profile.uid,
-        action: nextActive ? "ENABLE_USER" : "DISABLE_USER",
-        before: { uid, active: currentActive },
-        after: { uid, active: nextActive },
-        time: serverTimestamp()
-      });
+      await this.loadData();
       showAdminToast(isBn ? "ইউজারের অবস্থা আপডেট হয়েছে।" : "User status updated.", "success");
     } catch (err) {
-      showAdminToast(err.message, "error");
-    }
-  }
-
-  async saveAdminRole(uid, role, name, email) {
-    const isBn = this.getLang() === "bn";
-    const profile = this.getAdminProfile();
-    if (profile?.role !== "owner") {
-      showAdminToast(isBn ? "শুধুমাত্র Owner অ্যাডমিন রোল পরিবর্তন করতে পারবেন।" : "Only Owner can manage admin roles.", "error");
-      return;
-    }
-    if (!uid.trim() || !email.trim()) {
-      showAdminToast(isBn ? "UID এবং ইমেইল প্রয়োজন।" : "UID and Email are required.", "error");
-      return;
-    }
-
-    try {
-      const db = this.authService.db;
-      const { doc, setDoc, addDoc, collection, serverTimestamp } = this.authService.fsMod;
-      await setDoc(
-        doc(db, "admins", uid.trim()),
-        {
-          uid: uid.trim(),
-          role,
-          name: name.trim() || "Admin",
-          email: email.trim(),
-          active: true,
-          updatedAt: serverTimestamp()
-        },
-        { merge: true }
-      );
-      await addDoc(collection(db, "logs"), {
-        admin: profile.name || profile.email,
-        adminUid: profile.uid,
-        action: "UPSERT_ADMIN_ROLE",
-        before: {},
-        after: { uid: uid.trim(), role },
-        time: serverTimestamp()
-      });
-      showAdminToast(isBn ? "অ্যাডমিন রোল সংরক্ষিত হয়েছে।" : "Admin role saved.", "success");
-    } catch (err) {
-      showAdminToast(err.message, "error");
-    }
-  }
-
-  async removeAdmin(uid) {
-    const isBn = this.getLang() === "bn";
-    const profile = this.getAdminProfile();
-    if (profile?.role !== "owner") {
-      showAdminToast(isBn ? "শুধুমাত্র Owner অ্যাডমিন সরাতে পারবেন।" : "Only Owner can remove admins.", "error");
-      return;
-    }
-    if (uid === profile.uid) {
-      showAdminToast(isBn ? "আপনি নিজের অ্যাডমিন অ্যাক্সেস মুছতে পারবেন না।" : "You cannot remove your own admin access.", "error");
-      return;
-    }
-
-    const ok = await openConfirmModal({
-      title: isBn ? "অ্যাডমিন সরান" : "Remove Admin",
-      message: isBn ? `UID ${uid} এর অ্যাডমিন অ্যাক্সেস মুছে ফেলবেন?` : `Revoke admin access for UID ${uid}?`,
-      confirmLabel: isBn ? "মুছুন" : "Revoke",
-      cancelLabel: isBn ? "বাতিল" : "Cancel"
-    });
-    if (!ok) return;
-
-    try {
-      const db = this.authService.db;
-      const { doc, deleteDoc, addDoc, collection, serverTimestamp } = this.authService.fsMod;
-      await deleteDoc(doc(db, "admins", uid));
-      await addDoc(collection(db, "logs"), {
-        admin: profile.name || profile.email,
-        adminUid: profile.uid,
-        action: "REMOVE_ADMIN",
-        before: { uid },
-        after: {},
-        time: serverTimestamp()
-      });
-      showAdminToast(isBn ? "অ্যাডমিন অ্যাক্সেস বাতিল করা হয়েছে।" : "Admin access revoked.", "success");
-    } catch (err) {
-      showAdminToast(err.message, "error");
+      if (err?.status !== 401) {
+        showAdminToast(err.message, "error");
+      }
     }
   }
 
@@ -188,7 +76,6 @@ export class AdminUsersModule {
   renderUsersView() {
     const isBn = this.getLang() === "bn";
     const profile = this.getAdminProfile();
-    const isOwner = profile?.role === "owner";
     const activeCount = this.users.filter((u) => u.active !== false && u.status !== "blocked").length;
 
     const q = this.search.trim().toLowerCase();
@@ -205,7 +92,7 @@ export class AdminUsersModule {
         <div class="glass-card kpi-card">
           <span class="kpi-label">${isBn ? "মোট ইউজার" : "Total Users"}</span>
           <div class="kpi-value">${this.users.length}</div>
-          <span class="kpi-sub">Firestore: users</span>
+          <span class="kpi-sub">${isBn ? "পাবলিক ইউজার রেকর্ড" : "Directory Records"}</span>
         </div>
         <div class="glass-card kpi-card">
           <span class="kpi-label">${isBn ? "সক্রিয় ইউজার" : "Active Users"}</span>
@@ -213,9 +100,9 @@ export class AdminUsersModule {
           <span class="kpi-sub">${this.users.length - activeCount} ${isBn ? "নিষ্ক্রিয়/ব্লকড" : "blocked/inactive"}</span>
         </div>
         <div class="glass-card kpi-card">
-          <span class="kpi-label">${isBn ? "অনুমোদিত অ্যাডমিন" : "Authorized Admins"}</span>
-          <div class="kpi-value" style="color:var(--cyan);">${this.admins.length}</div>
-          <span class="kpi-sub">Firestore: admins/{uid}</span>
+          <span class="kpi-label">${isBn ? "অনুমোদিত অ্যাডমিন" : "Authorized Admin"}</span>
+          <div class="kpi-value" style="color:var(--cyan);">1</div>
+          <span class="kpi-sub">${isBn ? "সিঙ্গেল-অ্যাডমিন লকড" : "Single-Admin Locked"}</span>
         </div>
       </section>
 
@@ -231,7 +118,7 @@ export class AdminUsersModule {
           </div>
 
           <div class="field">
-            <input id="user-search-input" type="text" value="${escapeHtml(this.search)}" placeholder="${isBn ? "নাম, ইমেইল বা UID খুঁজুন..." : "Search by name, email or UID..."}" />
+            <input id="user-search-input" type="text" value="${escapeHtml(this.search)}" placeholder="${isBn ? "নাম, ইমেইল বা আইডি খুঁজুন..." : "Search by name, email or ID..."}" />
           </div>
 
           <div class="activity-list">
@@ -255,51 +142,43 @@ export class AdminUsersModule {
                     </div>
                   `;
                 }).join("")
-              : `<div class="activity-row" style="color:var(--muted);">${isBn ? "কোনো ইউজার রেকর্ড পাওয়া যায়নি।" : "No registered user records found in Firestore users/."}</div>`
+              : `<div class="activity-row" style="color:var(--muted);">${isBn ? "পাবলিক ইউজার প্যানেলে কোনো রেজিস্ট্রেশন ছাড়াই সবাই অ্যাক্সেস পাচ্ছে।" : "Public User Panel requires no registration. No blocked user records."}</div>`
             }
           </div>
         </div>
 
         <div class="glass-card panel-card">
           <div class="panel-head">
-            <h2>${isBn ? "অ্যাডমিন রোলস (admins/{uid})" : "Authorized Admins"}</h2>
+            <h2>${isBn ? "একক অনুমোদিত অ্যাডমিন" : "Single Authorized Admin"}</h2>
+            <span class="role-pill">OWNER</span>
           </div>
           <div class="activity-list">
-            ${this.admins.map((a) => `
-              <div class="activity-row">
-                <div>
-                  <strong>${escapeHtml(a.name || a.username || "Admin")}</strong>
-                  <div style="font-size:12px;color:var(--muted);">${escapeHtml(a.email || a.uid)}</div>
-                </div>
-                <div style="display:flex;align-items:center;gap:8px;">
-                  <span class="role-pill">${escapeHtml(a.role || "viewer")}</span>
-                  ${isOwner && a.uid !== profile.uid
-                    ? `<button type="button" class="btn btn-danger btn-sm" data-rm-admin="${escapeHtml(a.uid)}">✕</button>`
-                    : ""}
-                </div>
+            <div class="activity-row">
+              <div>
+                <strong>${escapeHtml(profile?.name || "FAHAD")}</strong>
+                <div style="font-size:12px;color:var(--muted);">${escapeHtml(profile?.email || "")}</div>
               </div>
-            `).join("")}
+              <span class="role-pill" style="color:var(--success);">ACTIVE</span>
+            </div>
+            <div class="activity-row">
+              <span>${isBn ? "পাবলিক রেজিস্ট্রেশন" : "Public Registration"}</span>
+              <span style="color:var(--gold);font-weight:600;">${isBn ? "সম্পূর্ণ নিষ্ক্রিয়" : "Disabled (Single-Admin Only)"}</span>
+            </div>
+            <div class="activity-row">
+              <span>${isBn ? "অথেনটিকেশন মোড" : "Authentication"}</span>
+              <span style="color:var(--cyan);font-weight:600;">scrypt + HttpOnly Cookie</span>
+            </div>
           </div>
-
-          ${isOwner ? `
-            <form id="add-admin-form" style="display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--border);padding-top:14px;">
-              <strong style="font-size:13.5px;">${isBn ? "নতুন অ্যাডমিন রোল যুক্ত/আপডেট করুন" : "Assign Admin Role by Firebase UID"}</strong>
-              <p style="margin:0;font-size:12px;color:var(--muted);">
-                ${isBn ? "প্রথমে Firebase Console -> Authentication থেকে ইউজার তৈরি করে UID কপি করুন।" : "Create the Auth user in Firebase Console first, then register their UID here."}
-              </p>
-              <div class="field"><input id="new-admin-uid" type="text" required placeholder="Firebase Auth UID" /></div>
-              <div class="field"><input id="new-admin-name" type="text" required placeholder="Admin Name" /></div>
-              <div class="field"><input id="new-admin-email" type="email" required placeholder="admin@domain.com" /></div>
-              <div class="field">
-                <select id="new-admin-role">
-                  <option value="editor">Editor</option>
-                  <option value="viewer">Viewer (Read-Only)</option>
-                  <option value="owner">Owner</option>
-                </select>
-              </div>
-              <button type="submit" class="btn btn-primary btn-sm">${isBn ? "রোল সংরক্ষণ করুন" : "Save Admin Role"}</button>
-            </form>
-          ` : ""}
+          <p style="margin:0;font-size:12.5px;color:var(--muted);">
+            ${isBn
+              ? "নিরাপত্তার জন্য শুধুমাত্র একটি অ্যাডমিন অ্যাকাউন্ট অনুমোদিত। নতুন অ্যাডমিন তৈরি করা যাবে না।"
+              : "By security policy, only one authorized administrator account is permitted. Public registration and extra admin creation are blocked."}
+          </p>
+          <div>
+            <button type="button" id="go-change-pw-btn" class="btn btn-glass btn-sm">
+              ${isBn ? "সেটিংস থেকে পাসওয়ার্ড পরিবর্তন করুন" : "Manage Password in Settings"}
+            </button>
+          </div>
         </div>
       </div>
     `;
@@ -317,17 +196,8 @@ export class AdminUsersModule {
     this.container.querySelectorAll("[data-toggle-user]").forEach((btn) => {
       btn.onclick = () => this.toggleUserStatus(btn.dataset.toggleUser, btn.dataset.active === "true");
     });
-    this.container.querySelectorAll("[data-rm-admin]").forEach((btn) => {
-      btn.onclick = () => this.removeAdmin(btn.dataset.rmAdmin);
-    });
-    this.container.querySelector("#add-admin-form")?.addEventListener("submit", (e) => {
-      e.preventDefault();
-      this.saveAdminRole(
-        this.container.querySelector("#new-admin-uid").value,
-        this.container.querySelector("#new-admin-role").value,
-        this.container.querySelector("#new-admin-name").value,
-        this.container.querySelector("#new-admin-email").value
-      );
+    this.container.querySelector("#go-change-pw-btn")?.addEventListener("click", () => {
+      this.onNavigate?.("settings");
     });
   }
 
@@ -344,11 +214,7 @@ export class AdminUsersModule {
             <span class="role-pill">${escapeHtml(profile.role)}</span>
           </div>
           <div class="field">
-            <label>UID</label>
-            <input type="text" value="${escapeHtml(profile.uid)}" disabled />
-          </div>
-          <div class="field">
-            <label>Email</label>
+            <label>Admin Email (Env Configured)</label>
             <input type="email" value="${escapeHtml(profile.email)}" disabled />
           </div>
           <div class="field">
@@ -361,7 +227,7 @@ export class AdminUsersModule {
           </div>
           <div style="display:flex;gap:10px;flex-wrap:wrap;">
             <button type="submit" class="btn btn-primary btn-sm">${isBn ? "প্রোফাইল আপডেট" : "Save Profile"}</button>
-            <button type="button" id="prof-reset-pw-btn" class="btn btn-glass btn-sm">${isBn ? "পাসওয়ার্ড রিসেট ইমেইল" : "Send Password Reset"}</button>
+            <button type="button" id="prof-pw-settings-btn" class="btn btn-glass btn-sm">${isBn ? "পাসওয়ার্ড পরিবর্তন" : "Change Password"}</button>
           </div>
         </form>
 
@@ -377,6 +243,10 @@ export class AdminUsersModule {
             <div class="activity-row">
               <span>${isBn ? "সুরক্ষিত রুট" : "Hidden Route"}</span>
               <code style="color:var(--cyan);">/FAHAD/admin</code>
+            </div>
+            <div class="activity-row">
+              <span>${isBn ? "কুকি নিরাপত্তা" : "Session Cookie"}</span>
+              <span style="color:var(--success);font-weight:600;">HttpOnly • Signed HMAC</span>
             </div>
           </div>
           <button type="button" id="prof-logout-btn" class="btn btn-danger">${isBn ? "নিরাপদ লগআউট" : "Logout Session"}</button>
@@ -394,27 +264,25 @@ export class AdminUsersModule {
         return;
       }
       try {
-        const db = this.authService.db;
-        const { doc, updateDoc, serverTimestamp } = this.authService.fsMod;
-        await updateDoc(doc(db, "admins", profile.uid), {
-          name: nextName,
-          avatar: nextAvatar,
-          updatedAt: serverTimestamp()
+        const res = await this.authService.apiFetch("/api/admin/profile", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: nextName, avatar: nextAvatar })
         });
-        profile.name = nextName;
-        profile.avatar = nextAvatar;
+        if (res.profile) {
+          profile.name = res.profile.name;
+          profile.avatar = res.profile.avatar;
+        }
         showAdminToast(isBn ? "প্রোফাইল আপডেট হয়েছে!" : "Profile updated!", "success");
       } catch (err) {
-        showAdminToast(err.message, "error");
+        if (err?.status !== 401) {
+          showAdminToast(err.message, "error");
+        }
       }
     });
 
-    this.container.querySelector("#prof-reset-pw-btn")?.addEventListener("click", async () => {
-      const res = await this.authService.resetPassword(profile.email, this.getLang());
-      showAdminToast(
-        res.ok ? (isBn ? "রিসেট ইমেইল পাঠানো হয়েছে।" : "Password reset email sent.") : res.message,
-        res.ok ? "success" : "error"
-      );
+    this.container.querySelector("#prof-pw-settings-btn")?.addEventListener("click", () => {
+      this.onNavigate?.("settings");
     });
 
     this.container.querySelector("#prof-logout-btn")?.addEventListener("click", () => this.onLogout?.());

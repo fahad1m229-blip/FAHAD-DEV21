@@ -1,0 +1,16 @@
+{
+  "name": "fahad-dev",
+  "version": "2.0.0",
+  "description": "FAHAD DEV Portfolio, Resource Hub, and Protected Single-Admin Dashboard",
+  "type": "module",
+  "main": "server.js",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "hash-password": "node scripts/hash-password.js",
+    "test": "node --test tests/auth.test.mjs"
+  },
+  "dependencies": {}
+}

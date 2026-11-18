@@ -46,8 +46,8 @@
 
       <form id="admin-login-form" style="display:flex;flex-direction:column;gap:14px;">
         <div class="field">
-          <label for="login-email" data-i18n="emailLabel">Admin Username or Email</label>
-          <input id="login-email" type="text" required autocomplete="username" placeholder="admin@yourdomain.com" />
+          <label for="login-email" data-i18n="emailLabel">Admin Email</label>
+          <input id="login-email" type="email" required autocomplete="email" placeholder="admin@yourdomain.com" />
         </div>
 
         <div class="field">
@@ -65,7 +65,7 @@
             <input id="login-remember" type="checkbox" checked />
             <span data-i18n="rememberMe">Remember me</span>
           </label>
-          <button id="forgot-password-btn" class="link-btn" type="button" data-i18n="forgotPassword">Forgot password?</button>
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);" data-i18n="singleAdminBadge">Single-Admin Auth</span>
         </div>
 
         <button id="login-submit-btn" class="btn btn-primary" type="submit" data-i18n="signInBtn">

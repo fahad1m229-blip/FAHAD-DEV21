@@ -2,7 +2,7 @@
  * FAHAD DEV — UI Rendering, Sanitization, 3D Tilt & Micro-Interactions
  */
 
-import { validateSafeUrl } from "./firebase-service.js";
+import { validateSafeUrl } from "./api-service.js";
 
 export function escapeHtml(value) {
   return String(value ?? "")

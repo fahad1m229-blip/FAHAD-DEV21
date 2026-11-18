@@ -1,21 +1,8 @@
 /**
- * FAHAD DEV — Firebase Firestore Real-Time Service & Seed Fallback
- * ---------------------------------------------------------------------------
- * Connects to Firebase Firestore using real-time onSnapshot() listeners for:
- *   settings/public, settings/seo, settings/ads, settings/community,
- *   settings/maintenance, settings/announcement,
- *   menu/{menuId}, categories/{categoryId},
- *   categories/{categoryId}/versions/{versionId},
- *   categories/{categoryId}/versions/{versionId}/links/{linkId},
- *   social/{socialId}, analytics/{eventId}
- *
- * When Firebase credentials are not yet configured in firebase-config.js,
- * the service gracefully exposes the seed schema without inventing fake URLs.
+ * FAHAD DEV — Public API Service & Seed Fallback
+ * Connects User Panel to /api/public/* endpoints without requiring authentication.
  */
 
-import { initFirebaseServices, isFirebaseConfigured } from "./firebase-config.js";
-
-// Sample Seed Data (used only before Firestore is populated/configured)
 export const SEED_DATA = {
   publicSettings: {
     siteName: "FAHAD DEV",
@@ -23,7 +10,7 @@ export const SEED_DATA = {
     heroTitle: "FAHAD DEV",
     heroSubtitle: "Creative Developer • Video Creator",
     heroVideoTitle: "WATCH THIS VIDEO",
-    heroVideoUrl: "", // Admin configures real YouTube URL in settings/public
+    heroVideoUrl: "",
     codeSnippet: {
       name: "FAHAD DEV",
       role: "Creative Developer",
@@ -39,8 +26,8 @@ export const SEED_DATA = {
   },
   announcement: {
     enabled: true,
-    textEn: "New V16.0 developer resource slots are live — real-time Firestore ready!",
-    textBn: "নতুন V16.0 ডেভেলপার রিসোর্স স্লট এখন লাইভ — রিয়েল-টাইম Firestore প্রস্তুত!"
+    textEn: "New V16.0 developer resource slots are live!",
+    textBn: "নতুন V16.0 ডেভেলপার রিসোর্স স্লট এখন লাইভ!"
   },
   maintenance: {
     enabled: false,
@@ -116,8 +103,8 @@ export const SEED_DATA = {
       icon: "bot",
       titleEn: "Bot Making",
       titleBn: "বট মেকিং",
-      descEn: "Automated Telegram & Discord workflow bots with webhook and Firestore support.",
-      descBn: "ওয়েবহুক ও ফায়ারস্টোর সাপোর্টসহ অটোমেটেড টেলিগ্রাম ও ডিসকর্ড বট সিস্টেম।",
+      descEn: "Automated Telegram & Discord workflow bots with webhook and server support.",
+      descBn: "ওয়েবহুক ও সার্ভার সাপোর্টসহ অটোমেটেড টেলিগ্রাম ও ডিসকর্ড বট সিস্টেম।",
       isNew: true,
       isPopular: false,
       published: true
@@ -130,8 +117,8 @@ export const SEED_DATA = {
       icon: "security",
       titleEn: "Security",
       titleBn: "সিকিউরিটি",
-      descEn: "Hardened Firestore security rules, URL sanitizers, and defensive web audits.",
-      descBn: "সুরক্ষিত Firestore সিকিউরিটি রুলস, URL ভ্যালিডেশন ও ওয়েব সিকিউরিটি গাইড।",
+      descEn: "Hardened server authentication, URL sanitizers, and defensive web audits.",
+      descBn: "সুরক্ষিত সার্ভার অথেনটিকেশন, URL ভ্যালিডেশন ও ওয়েব সিকিউরিটি গাইড।",
       isNew: false,
       isPopular: false,
       published: true
@@ -185,8 +172,8 @@ export const SEED_DATA = {
     order: idx + 1,
     titleEn: `${tag} Release Build`,
     titleBn: `${tag} রিলিজ বিল্ড`,
-    notesEn: `Sample seed release ${tag}. Connect Firestore to manage live release notes & verified URLs.`,
-    notesBn: `স্যাম্পল সিড রিলিজ ${tag}। লাইভ লিংক ও নোট ম্যানেজ করতে Firestore সংযুক্ত করুন।`,
+    notesEn: `Release ${tag} build ready.`,
+    notesBn: `রিলিজ ${tag}।`,
     isNew: tag === "V16.0",
     isPopular: tag === "V15.0" || tag === "V16.0",
     downloads: 0,
@@ -202,9 +189,6 @@ export const SEED_DATA = {
   ]
 };
 
-/**
- * Validates that a URL uses http: or https: and is not a dangerous protocol.
- */
 export function validateSafeUrl(rawUrl) {
   if (!rawUrl || typeof rawUrl !== "string") return null;
   const trimmed = rawUrl.trim();
@@ -220,50 +204,34 @@ export function validateSafeUrl(rawUrl) {
   }
 }
 
-export class FirebaseService {
+export class ApiService {
   constructor() {
-    this.app = null;
-    this.db = null;
-    this.auth = null;
-    this.firestoreMod = null;
     this.isLive = false;
-    this.unsubscribers = [];
-    this.modalUnsubscribers = [];
   }
 
   async init(handlers) {
-    if (!isFirebaseConfigured()) {
-      console.info("[FAHAD DEV] Firebase credentials not yet configured; running in Seed Mode.");
-      this.isLive = false;
-      this.emitSeedState(handlers);
-      return { live: false };
-    }
-
     try {
-      const services = await initFirebaseServices();
-      if (!services.configured) {
-        this.isLive = false;
-        this.emitSeedState(handlers);
-        return { live: false };
-      }
-      if (services.sdkError) {
-        throw services.sdkError;
-      }
-
-      this.firestoreMod = services.fsMod;
-      this.app = services.app;
-      this.db = services.db;
-      this.auth = services.auth;
+      const res = await fetch("/api/public/bootstrap", { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const payload = await res.json();
       this.isLive = true;
 
-      this.attachCoreListeners(handlers);
+      handlers.onPublicSettings?.(payload.publicSettings || SEED_DATA.publicSettings);
+      handlers.onSeo?.(payload.seo || SEED_DATA.seo);
+      handlers.onAds?.(payload.ads || SEED_DATA.ads);
+      handlers.onCommunity?.(payload.community || SEED_DATA.community);
+      handlers.onMaintenance?.(payload.maintenance || SEED_DATA.maintenance);
+      handlers.onAnnouncement?.(payload.announcement || SEED_DATA.announcement);
+      handlers.onMenu?.(payload.menu || SEED_DATA.menu);
+      handlers.onSocial?.(payload.social || SEED_DATA.social);
+      handlers.onCategories?.(payload.categories || SEED_DATA.categories);
+
       return { live: true };
-    } catch (error) {
-      console.error("[FAHAD DEV] Firebase initialization error:", error);
+    } catch (err) {
+      console.warn("[FAHAD DEV] Public API unavailable; using cached seed fallback.", err);
       this.isLive = false;
-      handlers.onError?.(error);
       this.emitSeedState(handlers);
-      return { live: false, error };
+      return { live: false, error: err };
     }
   }
 
@@ -279,156 +247,55 @@ export class FirebaseService {
     handlers.onCategories?.(SEED_DATA.categories);
   }
 
-  attachCoreListeners(handlers) {
-    const { doc, collection, query, orderBy, onSnapshot } = this.firestoreMod;
-
-    const watchDoc = (pathSegments, fallback, cb) => {
-      const ref = doc(this.db, ...pathSegments);
-      const unsub = onSnapshot(
-        ref,
-        (snap) => {
-          cb(snap.exists() ? { ...fallback, ...snap.data() } : fallback);
-        },
-        (err) => {
-          console.warn(`[Firestore] Listener error on ${pathSegments.join("/")}:`, err);
-          cb(fallback);
-        }
-      );
-      this.unsubscribers.push(unsub);
-    };
-
-    watchDoc(["settings", "public"], SEED_DATA.publicSettings, (d) => handlers.onPublicSettings?.(d));
-    watchDoc(["settings", "seo"], SEED_DATA.seo, (d) => handlers.onSeo?.(d));
-    watchDoc(["settings", "ads"], SEED_DATA.ads, (d) => handlers.onAds?.(d));
-    watchDoc(["settings", "community"], SEED_DATA.community, (d) => handlers.onCommunity?.(d));
-    watchDoc(["settings", "maintenance"], SEED_DATA.maintenance, (d) => handlers.onMaintenance?.(d));
-    watchDoc(["settings", "announcement"], SEED_DATA.announcement, (d) => handlers.onAnnouncement?.(d));
-
-    const watchCol = (colName, fallback, cb) => {
-      const q = query(collection(this.db, colName), orderBy("order", "asc"));
-      const unsub = onSnapshot(
-        q,
-        (snap) => {
-          if (snap.empty) {
-            cb(fallback);
-            return;
-          }
-          const items = snap.docs
-            .map((d) => ({ id: d.id, ...d.data() }))
-            .filter((item) => item.enabled !== false && item.published !== false);
-          cb(items);
-        },
-        (err) => {
-          console.warn(`[Firestore] Collection listener error on ${colName}:`, err);
-          handlers.onError?.(err);
-          cb(fallback);
-        }
-      );
-      this.unsubscribers.push(unsub);
-    };
-
-    watchCol("menu", SEED_DATA.menu, (items) => handlers.onMenu?.(items));
-    watchCol("social", SEED_DATA.social, (items) => handlers.onSocial?.(items));
-    watchCol("categories", SEED_DATA.categories, (items) => handlers.onCategories?.(items));
-  }
-
-  /**
-   * Real-time listener for versions inside a category.
-   */
-  subscribeVersions(categoryId, onUpdate, onError) {
-    this.clearModalListeners();
-
-    if (!this.isLive || !this.db) {
+  async subscribeVersions(categoryId, onUpdate, onError) {
+    if (!this.isLive) {
       onUpdate(SEED_DATA.seedVersions);
       return;
     }
-
-    const { collection, query, orderBy, onSnapshot } = this.firestoreMod;
-    const q = query(
-      collection(this.db, "categories", categoryId, "versions"),
-      orderBy("order", "asc")
-    );
-
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        if (snap.empty) {
-          onUpdate([]);
-          return;
-        }
-        const versions = snap.docs
-          .map((d) => ({ id: d.id, ...d.data() }))
-          .filter((v) => v.published !== false);
-        onUpdate(versions);
-      },
-      (err) => {
-        console.warn("[Firestore] Versions listener error:", err);
-        onError?.(err);
-      }
-    );
-
-    this.modalUnsubscribers.push(unsub);
+    try {
+      const res = await fetch(`/api/public/categories/${encodeURIComponent(categoryId)}/versions`, {
+        cache: "no-store"
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      onUpdate(data.versions || []);
+    } catch (err) {
+      onError?.(err);
+    }
   }
 
-  /**
-   * Real-time listener for links inside a version.
-   */
-  subscribeVersionLinks(categoryId, versionId, onUpdate, onError) {
-    if (!this.isLive || !this.db) {
+  async subscribeVersionLinks(categoryId, versionId, onUpdate, onError) {
+    if (!this.isLive) {
       onUpdate(SEED_DATA.seedLinkProviders);
       return;
     }
-
-    const { collection, query, orderBy, onSnapshot } = this.firestoreMod;
-    const q = query(
-      collection(this.db, "categories", categoryId, "versions", versionId, "links"),
-      orderBy("order", "asc")
-    );
-
-    const unsub = onSnapshot(
-      q,
-      (snap) => {
-        const links = snap.docs
-          .map((d) => ({ id: d.id, ...d.data() }))
-          .filter((l) => l.enabled !== false);
-        onUpdate(links);
-      },
-      (err) => {
-        console.warn("[Firestore] Links listener error:", err);
-        onError?.(err);
-      }
-    );
-
-    this.modalUnsubscribers.push(unsub);
+    try {
+      const res = await fetch(
+        `/api/public/categories/${encodeURIComponent(categoryId)}/versions/${encodeURIComponent(versionId)}/links`,
+        { cache: "no-store" }
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      onUpdate(data.links || []);
+    } catch (err) {
+      onError?.(err);
+    }
   }
 
-  /**
-   * Records an append-only analytics event in Firestore (protected by firestore.rules).
-   * Public users never mutate categories/versions documents directly.
-   */
   async trackEvent({ type, categoryId, versionId = null, linkId = null }) {
     const localKey = `fahad_dev_clicks_${categoryId}_${versionId || "cat"}`;
     const prev = Number(localStorage.getItem(localKey) || "0");
     localStorage.setItem(localKey, String(prev + 1));
 
-    if (!this.isLive || !this.db) return prev + 1;
+    if (!this.isLive) return prev + 1;
 
     try {
-      const { collection, addDoc, serverTimestamp } = this.firestoreMod;
-      const payload = {
-        type,
-        categoryId: String(categoryId).slice(0, 80),
-        platform: "web",
-        createdAt: serverTimestamp()
-      };
-      if (versionId) payload.versionId = String(versionId).slice(0, 80);
-      if (linkId) payload.linkId = String(linkId).slice(0, 80);
-
-      await addDoc(collection(this.db, "analytics"), payload);
-    } catch (err) {
-      // Non-blocking analytics failure
-      console.debug("[Analytics] Event skipped:", err?.message || err);
-    }
+      await fetch("/api/public/analytics", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, categoryId, versionId, linkId })
+      });
+    } catch {}
     return prev + 1;
   }
 
@@ -438,18 +305,6 @@ export class FirebaseService {
     return Number(baseDownloads || 0) + localClicks;
   }
 
-  clearModalListeners() {
-    while (this.modalUnsubscribers.length) {
-      const fn = this.modalUnsubscribers.pop();
-      try { fn(); } catch {}
-    }
-  }
-
-  destroy() {
-    this.clearModalListeners();
-    while (this.unsubscribers.length) {
-      const fn = this.unsubscribers.pop();
-      try { fn(); } catch {}
-    }
-  }
+  clearModalListeners() {}
+  destroy() {}
 }

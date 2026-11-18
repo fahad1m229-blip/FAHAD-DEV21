@@ -1,5 +1,6 @@
 /**
  * FAHAD DEV — Hidden Admin Panel Controller & Protected Router (/FAHAD/admin)
+ * Uses Single-Admin server authentication with HTTP-only signed session cookies.
  */
 
 import { initThreeBackground } from "./three-background.js";
@@ -39,12 +40,15 @@ const state = {
   lang: localStorage.getItem(STORAGE.lang) === "bn" ? "bn" : "en",
   activeRoute: "overview",
   adminProfile: null,
-  currentUser: null,
+  isAuthenticated: false,
   activeModule: null
 };
 
+let requestedSubRoute = null;
+
 const doLogout = async () => {
   await authService.signOut();
+  enforceLoggedOutState();
 };
 
 const dashboardMod = new AdminDashboardModule(
@@ -56,7 +60,8 @@ const usersMod = new AdminUsersModule(
   authService,
   () => state.adminProfile,
   () => state.lang,
-  doLogout
+  doLogout,
+  (routeId) => navigateTo(routeId)
 );
 const contentMod = new AdminContentModule(
   authService,
@@ -66,7 +71,11 @@ const contentMod = new AdminContentModule(
 const settingsMod = new AdminSettingsModule(
   authService,
   () => state.adminProfile,
-  () => state.lang
+  () => state.lang,
+  (infoMsg) => {
+    authService.stopInactivityWatcher();
+    enforceLoggedOutState(infoMsg, true);
+  }
 );
 
 function t(key) {
@@ -123,7 +132,7 @@ function applyLanguage(lang) {
   if (langBtn) langBtn.textContent = lang === "bn" ? "EN" : "বাং";
 
   renderSidebar();
-  if (state.currentUser && state.adminProfile) {
+  if (state.isAuthenticated && state.adminProfile) {
     renderSection();
   }
 }
@@ -170,8 +179,7 @@ function renderSidebar() {
 }
 
 async function navigateTo(routeId) {
-  // Protected Route Guard: Redirect unauthorized users to Login immediately
-  if (!state.currentUser || !state.adminProfile) {
+  if (!state.isAuthenticated || !state.adminProfile) {
     enforceLoggedOutState();
     return;
   }
@@ -195,7 +203,7 @@ async function navigateTo(routeId) {
 }
 
 function renderSection() {
-  if (!state.currentUser || !state.adminProfile) {
+  if (!state.isAuthenticated || !state.adminProfile) {
     enforceLoggedOutState();
     return;
   }
@@ -256,9 +264,34 @@ function closeMobileDrawer() {
   if (bd) bd.hidden = true;
 }
 
-function enforceLoggedOutState(errorMessage = null) {
-  state.currentUser = null;
+function enterAuthenticatedShell(adminProfile) {
+  state.isAuthenticated = true;
+  state.adminProfile = adminProfile;
+
+  const loginScreen = document.getElementById("admin-login-screen");
+  const shellScreen = document.getElementById("admin-app-shell");
+  if (loginScreen) loginScreen.hidden = true;
+  if (shellScreen) shellScreen.hidden = false;
+
+  const alertBox = document.getElementById("login-alert");
+  if (alertBox) alertBox.hidden = true;
+
+  state.activeRoute = requestedSubRoute || "overview";
+  requestedSubRoute = null;
+  syncBrowserUrl(state.activeRoute);
+  renderProfileHeader();
+  renderSidebar();
+  renderSection();
+
+  const mins = Number(localStorage.getItem(STORAGE.inactivityMin) || "30");
+  authService.startInactivityWatcher(mins, handleAutoLogout);
+}
+
+function enforceLoggedOutState(message = null, isInfo = false) {
+  state.isAuthenticated = false;
   state.adminProfile = null;
+  authService.stopInactivityWatcher();
+
   if (state.activeModule) {
     state.activeModule.unmount();
     state.activeModule = null;
@@ -273,12 +306,14 @@ function enforceLoggedOutState(errorMessage = null) {
 
   syncBrowserUrl("login");
 
-  if (errorMessage) {
-    const alertBox = document.getElementById("login-alert");
-    if (alertBox) {
-      alertBox.textContent = errorMessage;
-      alertBox.className = "auth-alert";
+  const alertBox = document.getElementById("login-alert");
+  if (alertBox) {
+    if (message) {
+      alertBox.textContent = message;
+      alertBox.className = `auth-alert ${isInfo ? "info" : ""}`;
       alertBox.hidden = false;
+    } else {
+      alertBox.hidden = true;
     }
   }
 }
@@ -289,7 +324,6 @@ function setupLoginForm() {
   const passIn = document.getElementById("login-password");
   const rememberChk = document.getElementById("login-remember");
   const submitBtn = document.getElementById("login-submit-btn");
-  const forgotBtn = document.getElementById("forgot-password-btn");
   const alertBox = document.getElementById("login-alert");
   let isSubmitting = false;
 
@@ -305,46 +339,14 @@ function setupLoginForm() {
     passIn.type = passIn.type === "password" ? "text" : "password";
   });
 
-  forgotBtn?.addEventListener("click", async () => {
-    const email = emailIn?.value?.trim();
-    if (!email) {
-      showAlert(t("enterEmailFirst"));
-      return;
-    }
-    forgotBtn.disabled = true;
-    try {
-      const res = await authService.resetPassword(email, state.lang);
-      if (res.ok) {
-        showAlert(t("resetSent"), true);
-      } else {
-        showAlert(res.message);
-      }
-    } catch (err) {
-      console.error("[AdminLogin] Forgot password error:", {
-        code: err?.code || "RESET_ERROR",
-        message: err?.message || String(err)
-      });
-      showAlert(err?.message || "Password reset failed.");
-    } finally {
-      forgotBtn.disabled = false;
-    }
-  });
-
   form?.addEventListener("submit", async (e) => {
     e.preventDefault();
     if (isSubmitting) return;
     if (alertBox) alertBox.hidden = true;
 
-    const remaining = authService.getLockoutRemainingMs();
-    if (remaining > 0) {
-      showAlert(`${t("lockoutWait")} (${Math.ceil(remaining / 1000)}s)`);
-      return;
-    }
-
     isSubmitting = true;
     submitBtn.disabled = true;
     submitBtn.textContent = t("signingIn");
-    console.info("[AdminLogin] Form submitted; awaiting authentication.");
 
     try {
       const res = await authService.signIn(
@@ -354,23 +356,23 @@ function setupLoginForm() {
         state.lang
       );
 
-      if (!res.ok) {
-        const triesLeft = authService.getRemainingAttempts();
-        const baseMsg = res.message || (res.reason === "not_admin" ? t("notAdminError") : t("firebaseNotConfigured"));
-        const suffix = res.showAttemptsLeft && triesLeft > 0 ? ` (${triesLeft} left)` : "";
-        showAlert(`${baseMsg}${suffix}`);
+      if (res.ok && res.adminProfile) {
+        if (passIn) passIn.value = "";
+        enterAuthenticatedShell(res.adminProfile);
+        return;
       }
+
+      const suffix =
+        typeof res.attemptsLeft === "number" && res.attemptsLeft > 0
+          ? ` (${res.attemptsLeft} left)`
+          : "";
+      showAlert(`${res.message || t("invalidCredentials")}${suffix}`);
     } catch (err) {
-      console.error("[AdminLogin] Unhandled error during sign-in:", {
-        code: err?.code || "LOGIN_SUBMIT_ERROR",
-        message: err?.message || String(err)
-      });
-      showAlert(err?.message || "Login request failed. Please try again.");
+      showAlert(err?.message || t("networkError"));
     } finally {
       isSubmitting = false;
       submitBtn.disabled = false;
       submitBtn.textContent = t("signInBtn");
-      console.info("[AdminLogin] Submit handler completed; button restored.");
     }
   });
 }
@@ -423,8 +425,8 @@ function setupShellInteractions() {
     if (threeDotMenu) threeDotMenu.hidden = true;
   });
 
-  document.getElementById("td-refresh-btn")?.addEventListener("click", () => {
-    if (state.activeRoute === "overview") dashboardMod.refresh();
+  document.getElementById("td-refresh-btn")?.addEventListener("click", async () => {
+    if (state.activeRoute === "overview") await dashboardMod.refresh();
     showAdminToast(state.lang === "bn" ? "ডেটা রিফ্রেশ হয়েছে।" : "Data refreshed.", "success");
   });
 
@@ -444,8 +446,8 @@ function setupShellInteractions() {
     openConfirmModal({
       title: "Hidden Admin Route Security",
       message: state.lang === "bn"
-        ? "এই প্যানেলটি /FAHAD/admin রুটে সুরক্ষিত। সকল ডেটা Firebase Auth এবং Firestore Security Rules দ্বারা নিয়ন্ত্রিত।"
-        : "Protected at /FAHAD/admin. Access is gated by Firebase Auth, admins/{uid} verification, and Firestore Security Rules.",
+        ? "এই প্যানেলটি /FAHAD/admin রুটে সুরক্ষিত। সার্ভার-সাইড সিঙ্গেল অ্যাডমিন অথেনটিকেশন (scrypt + HttpOnly কুকি) দ্বারা নিয়ন্ত্রিত।"
+        : "Protected at /FAHAD/admin. Secured by server-side single-admin authentication (scrypt password verification, rate limiting, and signed HttpOnly session cookies).",
       confirmLabel: "OK",
       cancelLabel: "Close"
     });
@@ -468,7 +470,7 @@ function setupShellInteractions() {
   document.getElementById("td-logout-btn")?.addEventListener("click", doLogout);
 
   window.addEventListener("popstate", () => {
-    if (!state.currentUser || !state.adminProfile) {
+    if (!state.isAuthenticated || !state.adminProfile) {
       enforceLoggedOutState();
       return;
     }
@@ -481,7 +483,7 @@ function setupShellInteractions() {
 
 async function handleAutoLogout() {
   await authService.signOut();
-  showAdminToast(t("autoLoggedOut"), "info");
+  enforceLoggedOutState(t("autoLoggedOut"), true);
 }
 
 async function bootstrap() {
@@ -490,76 +492,25 @@ async function bootstrap() {
   setupLoginForm();
   setupShellInteractions();
 
-  initThreeBackground(document.getElementById("admin-three-canvas"));
-
-  let requestedSubRoute = getRequestedSubRoute();
-  let initRes;
-  try {
-    initRes = await authService.init();
-  } catch (err) {
-    console.error("[AdminLogin] Bootstrap auth initialization threw error:", {
-      code: err?.code || "BOOTSTRAP_INIT_ERROR",
-      message: err?.message || String(err)
-    });
-    initRes = { configured: true, sdkError: err };
-  }
-
-  if (!initRes.configured) {
-    enforceLoggedOutState();
-    const alertBox = document.getElementById("login-alert");
-    if (alertBox) {
-      const fieldsNote = initRes.missingFields?.length
-        ? ` (${initRes.missingFields.join(", ")})`
-        : "";
-      alertBox.textContent = `${t("firebaseNotConfigured")}${fieldsNote}`;
-      alertBox.className = "auth-alert info";
-      alertBox.hidden = false;
-    }
-    return;
-  }
-
-  if (initRes.sdkError) {
-    enforceLoggedOutState(t("sdkLoadError"));
-    return;
-  }
-
-  authService.onAuthChange((session) => {
-    if (!session) {
-      enforceLoggedOutState();
-      return;
-    }
-
-    if (session.unauthorized) {
-      const msgKey =
-        session.reason === "inactive"
-          ? "adminInactiveError"
-          : session.reason === "permission_denied"
-          ? "dbPermissionError"
-          : session.reason === "db_timeout" || session.reason === "db_error"
-          ? "dbTimeoutError"
-          : "notAdminError";
-      enforceLoggedOutState(t(msgKey));
-      return;
-    }
-
-    state.currentUser = session.user;
-    state.adminProfile = session.adminProfile;
-
-    const loginScreen = document.getElementById("admin-login-screen");
-    const shellScreen = document.getElementById("admin-app-shell");
-    if (loginScreen) loginScreen.hidden = true;
-    if (shellScreen) shellScreen.hidden = false;
-
-    state.activeRoute = requestedSubRoute || "overview";
-    requestedSubRoute = null;
-    syncBrowserUrl(state.activeRoute);
-    renderProfileHeader();
-    renderSidebar();
-    renderSection();
-
-    const mins = Number(localStorage.getItem(STORAGE.inactivityMin) || "30");
-    authService.startInactivityWatcher(mins, handleAutoLogout);
+  authService.setUnauthorizedHandler(() => {
+    enforceLoggedOutState(t("unauthorizedSession"));
   });
+
+  initThreeBackground(document.getElementById("admin-three-canvas"));
+  requestedSubRoute = getRequestedSubRoute();
+
+  const session = await authService.checkSession();
+  if (!session.configured) {
+    const missingNote = session.missing?.length ? ` (${session.missing.join(", ")})` : "";
+    enforceLoggedOutState(`${t("serverNotConfigured")}${missingNote}`, true);
+    return;
+  }
+
+  if (session.authenticated && session.adminProfile) {
+    enterAuthenticatedShell(session.adminProfile);
+  } else {
+    enforceLoggedOutState();
+  }
 }
 
 bootstrap();

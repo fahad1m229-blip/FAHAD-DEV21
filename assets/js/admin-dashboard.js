@@ -1,6 +1,6 @@
 /**
  * FAHAD DEV Admin — Overview Dashboard Module
- * Live Firestore KPIs: Total Users, Active Users, Categories, Versions,
+ * Fetches live server KPIs: Total Users, Active Users, Categories, Versions,
  * Visitors, Download Clicks, Website Status, Charts & Recent Activity Logs.
  */
 
@@ -11,13 +11,13 @@ export class AdminDashboardModule {
     this.authService = authService;
     this.getLang = getLang;
     this.onNavigate = onNavigate;
-    this.unsubs = [];
+    this.pollTimer = null;
     this.rangeDays = 7;
     this.activeMetric = "visits";
     this.data = {
       totalUsers: 0,
       activeUsers: 0,
-      totalAdmins: 0,
+      totalAdmins: 1,
       categories: [],
       totalVersions: 0,
       totalLinks: 0,
@@ -31,148 +31,50 @@ export class AdminDashboardModule {
   mount(container) {
     this.container = container;
     this.render();
-    this.subscribe();
+    this.loadOverview();
+    this.pollTimer = setInterval(() => this.loadOverview(), 30_000);
   }
 
   unmount() {
-    while (this.unsubs.length) {
-      const u = this.unsubs.pop();
-      try { u(); } catch {}
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
     }
   }
 
-  refresh() {
-    this.unmount();
-    this.subscribe();
+  async refresh() {
+    await this.loadOverview();
   }
 
-  subscribe() {
-    const db = this.authService.db;
-    const { collection, doc, query, orderBy, limit, onSnapshot, getDocs } = this.authService.fsMod;
-    if (!db) return;
-
-    // 1. Users & Active Users from Firestore users + admins
-    this.unsubs.push(
-      onSnapshot(
-        collection(db, "users"),
-        (snap) => {
-          const docs = snap.docs.map((d) => d.data());
-          this.data.totalUsers = snap.size;
-          this.data.activeUsers = docs.filter((u) => u.active !== false && u.status !== "blocked").length;
-          this.render();
-        },
-        () => {
-          this.data.totalUsers = 0;
-          this.data.activeUsers = 0;
-        }
-      )
-    );
-
-    this.unsubs.push(
-      onSnapshot(
-        collection(db, "admins"),
-        (snap) => {
-          this.data.totalAdmins = snap.size;
-          this.render();
-        },
-        () => {}
-      )
-    );
-
-    // 2. Categories + nested versions & links count
-    this.unsubs.push(
-      onSnapshot(
-        collection(db, "categories"),
-        async (snap) => {
-          const cats = snap.docs
-            .map((d) => ({ id: d.id, ...d.data() }))
-            .sort((a, b) => Number(a.order ?? 999) - Number(b.order ?? 999));
-          let versionsCount = 0;
-          let linksCount = 0;
-
-          await Promise.all(
-            cats.map(async (cat) => {
-              try {
-                const vSnap = await getDocs(collection(db, "categories", cat.id, "versions"));
-                cat._versionCount = vSnap.size;
-                versionsCount += vSnap.size;
-                for (const vDoc of vSnap.docs) {
-                  const vData = vDoc.data();
-                  if (Array.isArray(vData.links)) linksCount += vData.links.length;
-                  try {
-                    const lSnap = await getDocs(
-                      collection(db, "categories", cat.id, "versions", vDoc.id, "links")
-                    );
-                    linksCount += lSnap.size;
-                  } catch {}
-                }
-              } catch {
-                cat._versionCount = 0;
-              }
-            })
-          );
-
-          this.data.categories = cats;
-          this.data.totalVersions = versionsCount;
-          this.data.totalLinks = linksCount;
-          this.render();
-        }
-      )
-    );
-
-    // 3. Stats/{day}
-    this.unsubs.push(
-      onSnapshot(
-        query(collection(db, "stats"), limit(30)),
-        (snap) => {
-          this.data.statsDocs = snap.docs
-            .map((d) => ({ day: d.id, ...d.data() }))
-            .sort((a, b) => a.day.localeCompare(b.day));
-          this.render();
-        },
-        () => {
-          this.data.statsDocs = [];
-          this.render();
-        }
-      )
-    );
-
-    // 4. Activity Logs
-    this.unsubs.push(
-      onSnapshot(
-        query(collection(db, "logs"), orderBy("time", "desc"), limit(8)),
-        (snap) => {
-          this.data.logs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-          this.render();
-        },
-        () => {
-          this.data.logs = [];
-          this.render();
-        }
-      )
-    );
-
-    // 5. Site & Maintenance Status
-    this.unsubs.push(
-      onSnapshot(doc(db, "settings", "site"), (snap) => {
-        this.data.siteSettings = snap.exists() ? snap.data() : {};
-        this.render();
-      })
-    );
-    this.unsubs.push(
-      onSnapshot(doc(db, "settings", "maintenance"), (snap) => {
-        this.data.maintenance = snap.exists() ? snap.data() : {};
-        this.render();
-      })
-    );
+  async loadOverview() {
+    try {
+      const overview = await this.authService.apiFetch("/api/admin/overview");
+      this.data = {
+        totalUsers: Number(overview.totalUsers || 0),
+        activeUsers: Number(overview.activeUsers || 0),
+        totalAdmins: Number(overview.totalAdmins || 1),
+        categories: Array.isArray(overview.categories) ? overview.categories : [],
+        totalVersions: Number(overview.totalVersions || 0),
+        totalLinks: Number(overview.totalLinks || 0),
+        statsDocs: Array.isArray(overview.statsDocs) ? overview.statsDocs : [],
+        logs: Array.isArray(overview.logs) ? overview.logs : [],
+        siteSettings: overview.siteSettings || {},
+        maintenance: overview.maintenance || {}
+      };
+      this.render();
+    } catch (err) {
+      if (err?.status !== 401) {
+        console.warn("[Dashboard] Overview fetch error:", err?.message || err);
+      }
+    }
   }
 
   renderChartSvg(statsSlice, metric, isBn) {
     if (!statsSlice.length) {
       return `
         <div style="text-align:center;color:var(--muted);padding:28px 12px;">
-          <p style="margin:0 0 6px;font-weight:600;">${isBn ? "এখনো কোনো লাইভ অ্যানালিটিক্স ডেটা নেই" : "No live stats/{day} records yet"}</p>
-          <span style="font-size:12px;">${isBn ? "stats/{YYYY-MM-DD} থেকে রিয়েল-টাইম ভিজিটর ও ক্লিক গ্রাফ দেখাবে।" : "Real metrics render automatically from Firestore stats/{YYYY-MM-DD}."}</span>
+          <p style="margin:0 0 6px;font-weight:600;">${isBn ? "এখনো কোনো লাইভ অ্যানালিটিক্স ডেটা নেই" : "No live visitor stats recorded yet"}</p>
+          <span style="font-size:12px;">${isBn ? "ইউজার প্যানেল ভিজিট ও ক্লিক থেকে রিয়েল-টাইম গ্রাফ দেখাবে।" : "Real metrics render automatically from public server traffic."}</span>
         </div>
       `;
     }
@@ -230,12 +132,12 @@ export class AdminDashboardModule {
         <div class="glass-card kpi-card">
           <span class="kpi-label">${isBn ? "মোট ইউজার" : "Total Users"}</span>
           <div class="kpi-value">${this.data.totalUsers}</div>
-          <span class="kpi-sub">${this.data.totalAdmins} ${isBn ? "জন অ্যাডমিন" : "Admin(s)"}</span>
+          <span class="kpi-sub">${this.data.totalAdmins} ${isBn ? "অনুমোদিত অ্যাডমিন" : "Authorized Admin"}</span>
         </div>
         <div class="glass-card kpi-card">
           <span class="kpi-label">${isBn ? "সক্রিয় ইউজার" : "Active Users"}</span>
           <div class="kpi-value" style="color:var(--success);">${this.data.activeUsers}</div>
-          <span class="kpi-sub">Firestore: users</span>
+          <span class="kpi-sub">${isBn ? "পাবলিক ইউজার প্যানেল উন্মুক্ত" : "Public User Panel"}</span>
         </div>
         <div class="glass-card kpi-card">
           <span class="kpi-label">${isBn ? "মোট ক্যাটাগরি / ভার্সন" : "Categories / Versions"}</span>
@@ -245,7 +147,7 @@ export class AdminDashboardModule {
         <div class="glass-card kpi-card">
           <span class="kpi-label">${isBn ? "আজকের ভিজিটর" : "Today's Visitors"}</span>
           <div class="kpi-value">${todayDoc ? Number(todayDoc.visits || 0) : 0}</div>
-          <span class="kpi-sub">${todayDoc ? escapeHtml(todayKey) : (isBn ? "রেকর্ড নেই" : "No stats/{day} yet")}</span>
+          <span class="kpi-sub">${todayDoc ? escapeHtml(todayKey) : (isBn ? "রেকর্ড নেই" : "No visits today yet")}</span>
         </div>
         <div class="glass-card kpi-card">
           <span class="kpi-label">${isBn ? "মোট ডাউনলোড ক্লিক" : "Total Download Clicks"}</span>
@@ -301,8 +203,8 @@ export class AdminDashboardModule {
               <span style="color:var(--cyan);font-weight:600;">/FAHAD/admin</span>
             </div>
             <div class="activity-row">
-              <span>Firebase Auth + Role Gate</span>
-              <span style="color:var(--success);font-weight:600;">admins/{uid}</span>
+              <span>Server Auth &amp; Session</span>
+              <span style="color:var(--success);font-weight:600;">Single-Admin • HttpOnly</span>
             </div>
           </div>
         </div>
@@ -322,7 +224,7 @@ export class AdminDashboardModule {
                       <div style="font-size:12px;color:var(--muted);">${escapeHtml(log.admin || "Admin")}</div>
                     </div>
                     <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);">
-                      ${log.time?.toDate ? log.time.toDate().toLocaleString() : "—"}
+                      ${log.time ? new Date(log.time).toLocaleString() : "—"}
                     </span>
                   </div>
                 `).join("")
@@ -339,11 +241,11 @@ export class AdminDashboardModule {
             ${this.data.categories.length
               ? this.data.categories.slice(0, 5).map((cat) => `
                   <div class="activity-row">
-                    <span>${escapeHtml(cat.icon || "📁")} ${escapeHtml(cat.title || cat.titleEn || cat.id)}</span>
+                    <span>${escapeHtml(cat.title || cat.titleEn || cat.id)}</span>
                     <span class="role-pill">${cat._versionCount ?? 0} ver</span>
                   </div>
                 `).join("")
-              : `<div class="activity-row" style="color:var(--muted);">${isBn ? "Firestore-এ এখনো কোনো ক্যাটাগরি নেই।" : "No categories found in Firestore yet."}</div>`
+              : `<div class="activity-row" style="color:var(--muted);">${isBn ? "এখনো কোনো ক্যাটাগরি নেই।" : "No categories found yet."}</div>`
             }
           </div>
         </div>
@@ -365,8 +267,8 @@ export class AdminDashboardModule {
     this.container.querySelectorAll("[data-nav]").forEach((btn) => {
       btn.onclick = () => this.onNavigate?.(btn.dataset.nav);
     });
-    this.container.querySelector("#dash-refresh-btn")?.addEventListener("click", () => {
-      this.refresh();
+    this.container.querySelector("#dash-refresh-btn")?.addEventListener("click", async () => {
+      await this.refresh();
       showAdminToast(isBn ? "ডেটা রিফ্রেশ হয়েছে।" : "Dashboard data refreshed.", "success");
     });
   }

@@ -1,8 +1,8 @@
 /* FAHAD DEV — Progressive Web App Service Worker
  * Caches static shell assets for instant loading and provides offline.html fallback.
- * Skips Firestore/Google APIs so real-time listeners never serve stale auth/API responses.
+ * Skips /api/ and hidden/admin routes so authenticated requests are never cached.
  */
-const CACHE_VERSION = 'fahad-dev-v1.0.2';
+const CACHE_VERSION = 'fahad-dev-v2.0.0';
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -10,8 +10,7 @@ const STATIC_ASSETS = [
   './manifest.json',
   './assets/css/style.css',
   './assets/js/app.js',
-  './assets/js/firebase-config.js',
-  './assets/js/firebase-service.js',
+  './assets/js/api-service.js',
   './assets/js/ui.js',
   './assets/js/three-background.js',
   './assets/js/translations.js',
@@ -49,12 +48,12 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(request.url);
 
-  // Never intercept Firebase, Google APIs, live firebase-config.js, or hidden/admin routes
+  // Never intercept cross-origin requests, APIs, or hidden/admin routes
   if (
     url.origin !== self.location.origin ||
+    url.pathname.startsWith('/api/') ||
     url.pathname.includes('/FAHAD/admin') ||
-    url.pathname.startsWith('/admin') ||
-    url.pathname.endsWith('/firebase-config.js')
+    url.pathname.startsWith('/admin')
   ) {
     return;
   }

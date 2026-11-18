@@ -2,7 +2,7 @@
  * FAHAD DEV — Main Application Controller (ES Module)
  */
 
-import { FirebaseService, SEED_DATA, validateSafeUrl } from "./firebase-service.js";
+import { ApiService, SEED_DATA, validateSafeUrl } from "./api-service.js";
 import { initThreeBackground } from "./three-background.js";
 import { TRANSLATIONS } from "./translations.js";
 import {
@@ -39,11 +39,11 @@ const state = {
   activeVersion: null,
   activeLinks: [],
   isLoadingCategories: true,
-  isLiveFirestore: false,
+  isLiveServer: false,
   deferredInstallPrompt: null
 };
 
-const firebaseService = new FirebaseService();
+const apiService = new ApiService();
 let typingTimer = null;
 
 function t(key) {
@@ -182,8 +182,8 @@ function renderHeaderAndSeo() {
 
   const syncStatus = document.getElementById("sync-status-pill");
   if (syncStatus) {
-    syncStatus.textContent = state.isLiveFirestore ? t("dataModeLive") : t("dataModeSeed");
-    syncStatus.classList.toggle("is-live", state.isLiveFirestore);
+    syncStatus.textContent = state.isLiveServer ? t("dataModeLive") : t("dataModeSeed");
+    syncStatus.classList.toggle("is-live", state.isLiveServer);
   }
 }
 
@@ -422,10 +422,10 @@ function openCategoryModal(categoryId) {
   modal.hidden = false;
   document.body.classList.add("modal-open");
 
-  firebaseService.trackEvent({ type: "view_category", categoryId: category.id });
+  apiService.trackEvent({ type: "view_category", categoryId: category.id });
   renderVersionsLoading();
 
-  firebaseService.subscribeVersions(
+  apiService.subscribeVersions(
     category.id,
     (versions) => {
       state.activeVersions = versions;
@@ -447,7 +447,7 @@ function closeCategoryModal() {
   document.body.classList.remove("modal-open");
   state.activeCategory = null;
   state.activeVersion = null;
-  firebaseService.clearModalListeners();
+  apiService.clearModalListeners();
 }
 
 function renderVersionsLoading() {
@@ -488,7 +488,7 @@ function renderVersionsListView() {
       ${state.activeVersions.map((ver) => {
         const verTag = escapeHtml(ver.version || ver.id);
         const notes = escapeHtml(localized(ver, "notes"));
-        const dlCount = firebaseService.getLocalDownloadCount(state.activeCategory.id, ver.id, ver.downloads);
+        const dlCount = apiService.getLocalDownloadCount(state.activeCategory.id, ver.id, ver.downloads);
         return `
           <div class="version-row">
             <div class="version-info">
@@ -515,7 +515,7 @@ function openVersionLinks(versionId) {
   if (!version || !state.activeCategory) return;
 
   state.activeVersion = version;
-  firebaseService.trackEvent({
+  apiService.trackEvent({
     type: "view_version",
     categoryId: state.activeCategory.id,
     versionId: version.id
@@ -526,7 +526,7 @@ function openVersionLinks(versionId) {
     bodyEl.innerHTML = `<div class="links-grid">${Array.from({ length: 4 }).map(() => `<div class="skeleton-line h-96"></div>`).join("")}</div>`;
   }
 
-  firebaseService.subscribeVersionLinks(
+  apiService.subscribeVersionLinks(
     state.activeCategory.id,
     version.id,
     (links) => {
@@ -547,7 +547,7 @@ function renderVersionLinksView() {
   const bodyEl = document.getElementById("modal-body");
   if (!bodyEl || !state.activeCategory || !state.activeVersion) return;
 
-  const dlCount = firebaseService.getLocalDownloadCount(
+  const dlCount = apiService.getLocalDownloadCount(
     state.activeCategory.id,
     state.activeVersion.id,
     state.activeVersion.downloads
@@ -759,7 +759,7 @@ function setupEventHandlers() {
 
     if (e.target.closest("#back-to-versions-btn")) {
       state.activeVersion = null;
-      firebaseService.subscribeVersions(
+      apiService.subscribeVersions(
         state.activeCategory.id,
         (versions) => {
           state.activeVersions = versions;
@@ -793,7 +793,7 @@ function setupEventHandlers() {
         showToast(t("invalidUrlToast"), "error");
         return;
       }
-      firebaseService.trackEvent({
+      apiService.trackEvent({
         type: "share_click",
         categoryId: state.activeCategory?.id || "general",
         versionId: state.activeVersion?.id || null
@@ -828,7 +828,7 @@ function setupEventHandlers() {
 
     const trackLink = e.target.closest("[data-track-link]");
     if (trackLink && state.activeCategory && state.activeVersion) {
-      const nextCount = await firebaseService.trackEvent({
+      const nextCount = await apiService.trackEvent({
         type: "download_click",
         categoryId: state.activeCategory.id,
         versionId: state.activeVersion.id,
@@ -947,8 +947,8 @@ async function bootstrap() {
     setTimeout(() => loader?.remove(), 450);
   }, 550);
 
-  // Connect Firebase Firestore real-time listeners
-  const { live } = await firebaseService.init({
+  // Connect Public Server API
+  const { live } = await apiService.init({
     onPublicSettings: (d) => { state.publicSettings = d; renderHeaderAndSeo(); startTypingEffect(); },
     onSeo: (d) => { state.seo = d; renderHeaderAndSeo(); },
     onAds: (d) => { state.ads = d; renderAllAds(); renderCategoryGrid(); },
@@ -968,7 +968,7 @@ async function bootstrap() {
     }
   });
 
-  state.isLiveFirestore = live;
+  state.isLiveServer = live;
   renderHeaderAndSeo();
   maybeShowCommunityPopup();
 }
